@@ -110,3 +110,26 @@ describe('runDailyReminders: доставка', () => {
     expect(report).toEqual({ sent: ['anna'], skipped: [], failed: [] });
   });
 });
+
+describe('runDailyReminders: дублі і паралельний запуск', () => {
+  it('тест брифу 4: повторний запуск того ж дня не шле нічого', async () => {
+    const { deps, messenger } = setup(threeOverdueTasks(), USERS);
+
+    await runDailyReminders(NOW, deps);
+    const secondReport = await runDailyReminders(LATER_SAME_DAY, deps);
+
+    expect(messenger.attempts).toEqual(['chat-anna', 'chat-bohdan', 'chat-vira']);
+    expect(secondReport).toEqual({ sent: [], skipped: [], failed: [] });
+  });
+
+  it('наступного дня нагадування знову йдуть', async () => {
+    const { deps, messenger } = setup(threeOverdueTasks(), USERS);
+    const nextDay = new Date('2026-03-11T08:00:00Z');
+
+    await runDailyReminders(NOW, deps);
+    const nextReport = await runDailyReminders(nextDay, deps);
+
+    expect(messenger.sent.length).toBe(6);
+    expect(nextReport.sent).toEqual(['anna', 'bohdan', 'vira']);
+  });
+});

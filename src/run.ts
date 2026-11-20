@@ -15,6 +15,7 @@
 
 import type { TaskRepo, UserRepo, Messenger, SentLog, AttemptLog, Lock } from './ports.ts';
 import type { RunReport } from './types.ts';
+import { kyivDay } from './time.ts';
 import { groupOverdueByUser } from './overdue.ts';
 import { buildReminderText } from './format.ts';
 
@@ -31,6 +32,7 @@ export interface RunDeps {
 
 export async function runDailyReminders(now: Date, deps: RunDeps): Promise<RunReport> {
   const report: RunReport = { sent: [], skipped: [], failed: [] };
+  const day = kyivDay(now);
 
   const tasks = await deps.taskRepo.listNotDone();
   const overdue = groupOverdueByUser(tasks, now);
@@ -40,8 +42,13 @@ export async function runDailyReminders(now: Date, deps: RunDeps): Promise<RunRe
     if (user === undefined) {
       continue;
     }
+    const alreadySent = await deps.sentLog.has(group.userId, day);
+    if (alreadySent) {
+      continue;
+    }
     const text = buildReminderText(group.tasks);
     await deps.messenger.send(user.telegramChatId, text);
+    await deps.sentLog.mark(group.userId, day);
     report.sent.push(group.userId);
   }
 
