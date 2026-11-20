@@ -57,10 +57,18 @@ async function sendReminders(now: Date, day: string, deps: RunDeps): Promise<Run
 
   const tasks = await deps.taskRepo.listNotDone();
   const overdue = groupOverdueByUser(tasks, now);
+  for (const item of overdue.skipped) {
+    report.skipped.push(item);
+  }
 
   for (const group of overdue.groups) {
     const user = await deps.userRepo.get(group.userId);
     if (user === undefined) {
+      report.skipped.push({ kind: 'user', id: group.userId, reason: 'user_not_found' });
+      continue;
+    }
+    if (!user.telegramChatId) {
+      report.skipped.push({ kind: 'user', id: group.userId, reason: 'no_chat_id' });
       continue;
     }
     const alreadySent = await deps.sentLog.has(group.userId, day);

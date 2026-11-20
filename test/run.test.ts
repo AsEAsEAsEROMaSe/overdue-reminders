@@ -296,3 +296,35 @@ describe('runDailyReminders: коди Telegram і ліміт спроб', () => 
     expect(sentChatIds(messenger)).toEqual(['chat-anna']);
   });
 });
+
+describe('runDailyReminders: погані дані', () => {
+  it('тест брифу 8: старий запис без дедлайну і користувач без chat_id у skipped, запуск не падає', async () => {
+    // Старі записи без полів: обходимо типи навмисно
+    const noDeadline = { id: 'old1', assigneeId: 'anna', title: 'Стара задача', status: 'open' } as unknown as Task;
+    const noAssignee = { id: 'old2', title: 'Нічия', deadline: new Date('2026-03-01T10:00:00Z'), status: 'open' } as unknown as Task;
+    const noChatUser = { id: 'hryhorii' } as unknown as User;
+    const users = [USERS[0], noChatUser] as User[];
+    const tasks = [
+      noDeadline,
+      makeTask('t1', 'anna', 'Рахунок', '2026-03-05T10:00:00Z'),
+      makeTask('t2', 'hryhorii', 'Звіт', '2026-03-05T10:00:00Z'),
+      makeTask('t3', 'nobody', 'Привид', '2026-03-05T10:00:00Z'),
+      noAssignee,
+    ];
+    const { deps, messenger } = setup(tasks, users);
+
+    const report = await runDailyReminders(NOW, deps);
+
+    expect(report).toEqual({
+      sent: ['anna'],
+      skipped: [
+        { kind: 'task', id: 'old1', reason: 'no_deadline' },
+        { kind: 'task', id: 'old2', reason: 'no_assignee' },
+        { kind: 'user', id: 'hryhorii', reason: 'no_chat_id' },
+        { kind: 'user', id: 'nobody', reason: 'user_not_found' },
+      ],
+      failed: [],
+    });
+    expect(messenger.attempts).toEqual(['chat-anna']);
+  });
+});
