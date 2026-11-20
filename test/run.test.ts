@@ -156,6 +156,17 @@ describe('runDailyReminders: блокування', () => {
     expect(reports[1]).toEqual({ sent: [], skipped: [], failed: [] });
   });
 
+  it('якщо блокування цього дня вже тримає інший процес, запуск нічого не шле', async () => {
+    const { deps, messenger } = setup(threeOverdueTasks(), USERS);
+    await deps.lock.acquire('daily-reminders:2026-03-10');
+
+    const report = await runDailyReminders(NOW, deps);
+
+    expect(report).toEqual({ sent: [], skipped: [], failed: [] });
+    expect(messenger.attempts).toEqual([]);
+    expect(await deps.attemptLog.count('anna', '2026-03-10')).toBe(0);
+  });
+
   it('блокування знімається навіть після помилки, наступний запуск працює', async () => {
     const { deps, messenger } = setup(threeOverdueTasks(), USERS);
     const realTaskRepo = deps.taskRepo;
@@ -251,6 +262,22 @@ describe('runDailyReminders: коди Telegram і ліміт спроб', () => 
     expect(messenger.attempts).toEqual(['chat-anna', 'chat-bohdan', 'chat-vira']);
   });
 
+  it('після 403 того ж дня не пробуємо, навіть якщо бота вже розблокували', async () => {
+    const tasks = [makeTask('t1', 'anna', 'Рахунок', '2026-03-05T10:00:00Z')];
+    const { deps, messenger } = setup(tasks, USERS);
+    messenger.failFor('chat-anna', 'blocked');
+
+    await runDailyReminders(NOW, deps);
+    expect(await deps.attemptLog.count('anna', '2026-03-10')).toBe(3);
+
+    messenger.clearFailure('chat-anna');
+    const secondReport = await runDailyReminders(LATER_SAME_DAY, deps);
+
+    expect(secondReport.sent).toEqual([]);
+    expect(messenger.sent).toEqual([]);
+    expect(messenger.attempts).toEqual(['chat-anna']);
+  });
+
   it('тест брифу 7: після трьох спроб з 429 користувач в остаточних failed', async () => {
     const tasks = [makeTask('t1', 'anna', 'Рахунок', '2026-03-05T10:00:00Z')];
     const { deps, messenger } = setup(tasks, USERS);
@@ -326,5 +353,66 @@ describe('runDailyReminders: погані дані', () => {
       failed: [],
     });
     expect(messenger.attempts).toEqual(['chat-anna']);
+  });
+});
+
+describe('runDailyReminders: другий рубіж для статусу, межі доби і chat_id', () => {
+  it('задача done не надсилається, навіть якщо сховище її повернуло', async () => {
+    const doneTask: Task = {
+      id: 't1',
+      assigneeId: 'anna',
+      title: 'Вже зроблено',
+      deadline: new Date('2026-03-01T10:00:00Z'),
+      status: 'done',
+    };
+    const { deps, messenger } = setup([], USERS);
+    // Сховище з помилкою: віддає і виконані задачі
+    deps.taskRepo = {
+      async listNotDone() {
+        return [doneTask];
+      },
+    };
+
+    const report = await runDailyReminders(NOW, deps);
+
+    expect(report).toEqual({ sent: [], skipped: [], failed: [] });
+    expect(messenger.attempts).toEqual([]);
+  });
+
+  it('дедлайн сьогодні вранці, до запуску, ще не прострочений', async () => {
+    // 05:00 UTC = 07:00 10 березня за Києвом, запуск о 10:00 того ж дня
+    const tasks = [
+      makeTask('t1', 'anna', 'Сьогоднішня', '2026-03-10T05:00:00Z'),
+      makeTask('t2', 'bohdan', 'Вчорашня', '2026-03-09T20:00:00Z'),
+    ];
+    const { deps, messenger } = setup(tasks, USERS);
+
+    const report = await runDailyReminders(NOW, deps);
+
+    expect(report).toEqual({ sent: ['bohdan'], skipped: [], failed: [] });
+    expect(messenger.sent).toEqual([
+      { chatId: 'chat-bohdan', text: 'Прострочені задачі: 1\n1. Вчорашня (дедлайн 09.03.2026 22:00)' },
+    ]);
+  });
+
+  it('користувач з порожнім chat_id у skipped, на порожню адресу нічого не шлемо', async () => {
+    const users: User[] = [
+      { id: 'anna', telegramChatId: '' },
+      { id: 'bohdan', telegramChatId: 'chat-bohdan' },
+    ];
+    const tasks = [
+      makeTask('t1', 'anna', 'Рахунок', '2026-03-05T10:00:00Z'),
+      makeTask('t2', 'bohdan', 'Звіт', '2026-03-06T10:00:00Z'),
+    ];
+    const { deps, messenger } = setup(tasks, users);
+
+    const report = await runDailyReminders(NOW, deps);
+
+    expect(report).toEqual({
+      sent: ['bohdan'],
+      skipped: [{ kind: 'user', id: 'anna', reason: 'no_chat_id' }],
+      failed: [],
+    });
+    expect(messenger.attempts).toEqual(['chat-bohdan']);
   });
 });

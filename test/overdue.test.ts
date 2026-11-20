@@ -39,6 +39,13 @@ describe('groupOverdueByUser', () => {
     expect(result.groups).toEqual([{ userId: 'u1', tasks: [task] }]);
   });
 
+  it('літній час: дедлайн 00:30 15 липня за Києвом о 10:00 того ж дня ще не прострочений', () => {
+    // 21:30 UTC 14 липня = 00:30 15 липня за Києвом (UTC+3); зараз 10:00 15 липня
+    const task = makeTask('t1', 'u1', '2026-07-14T21:30:00Z', 'open');
+    const result = groupOverdueByUser([task], new Date('2026-07-15T07:00:00Z'));
+    expect(result.groups).toEqual([]);
+  });
+
   it('тест брифу 3: задача done з простроченим дедлайном не потрапляє в список', () => {
     const doneTask = makeTask('t1', 'u1', '2026-03-01T10:00:00Z', 'done');
     const openTask = makeTask('t2', 'u2', '2026-03-01T10:00:00Z', 'in_progress');
