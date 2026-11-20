@@ -21,6 +21,7 @@ import { groupOverdueByUser } from './overdue.ts';
 import { buildReminderText } from './format.ts';
 
 const DEFAULT_SEND_TIMEOUT_MS = 10000;
+const MAX_ATTEMPTS = 3;
 
 export interface RunDeps {
   taskRepo: TaskRepo;
@@ -66,17 +67,34 @@ async function sendReminders(now: Date, day: string, deps: RunDeps): Promise<Run
     if (alreadySent) {
       continue;
     }
+
+    // Не більше MAX_ATTEMPTS спроб на користувача за день
+    const attemptsBefore = await deps.attemptLog.count(group.userId, day);
+    if (attemptsBefore >= MAX_ATTEMPTS) {
+      report.failed.push({ userId: group.userId, reason: 'attempts_exhausted', final: true });
+      continue;
+    }
+    const attempts = attemptsBefore + 1;
+    await deps.attemptLog.set(group.userId, day, attempts);
+
     const text = buildReminderText(group.tasks);
     let outcome = '';
     try {
       outcome = await sendWithTimeout(deps.messenger, user.telegramChatId, text, getTimeoutMs(deps));
     } catch (error) {
       // Збій одному користувачу не зупиняє решту; mark не ставимо, наступний запуск повторить
-      report.failed.push({ userId: group.userId, reason: getErrorReason(error), final: false });
+      const reason = getErrorReason(error);
+      if (reason === 'blocked') {
+        // 403: бот заблокований, сьогодні більше не пробуємо
+        await deps.attemptLog.set(group.userId, day, MAX_ATTEMPTS);
+        report.failed.push({ userId: group.userId, reason: reason, final: true });
+        continue;
+      }
+      report.failed.push({ userId: group.userId, reason: reason, final: isLastAttempt(attempts) });
       continue;
     }
     if (outcome === 'timeout') {
-      report.failed.push({ userId: group.userId, reason: 'timeout', final: false });
+      report.failed.push({ userId: group.userId, reason: 'timeout', final: isLastAttempt(attempts) });
       continue;
     }
     await deps.sentLog.mark(group.userId, day);
@@ -84,6 +102,13 @@ async function sendReminders(now: Date, day: string, deps: RunDeps): Promise<Run
   }
 
   return report;
+}
+
+function isLastAttempt(attempts: number): boolean {
+  if (attempts >= MAX_ATTEMPTS) {
+    return true;
+  }
+  return false;
 }
 
 function getTimeoutMs(deps: RunDeps): number {

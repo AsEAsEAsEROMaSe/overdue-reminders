@@ -229,3 +229,70 @@ describe('runDailyReminders: збої доставки', () => {
     ]);
   });
 });
+
+describe('runDailyReminders: коди Telegram і ліміт спроб', () => {
+  it('тест брифу 7: 403 не повторюється наступним запуском', async () => {
+    const { deps, messenger } = setup(threeOverdueTasks(), USERS);
+    messenger.failFor('chat-vira', 'blocked');
+
+    const firstReport = await runDailyReminders(NOW, deps);
+    const secondReport = await runDailyReminders(LATER_SAME_DAY, deps);
+
+    expect(firstReport).toEqual({
+      sent: ['anna', 'bohdan'],
+      skipped: [],
+      failed: [{ userId: 'vira', reason: 'blocked', final: true }],
+    });
+    expect(secondReport).toEqual({
+      sent: [],
+      skipped: [],
+      failed: [{ userId: 'vira', reason: 'attempts_exhausted', final: true }],
+    });
+    expect(messenger.attempts).toEqual(['chat-anna', 'chat-bohdan', 'chat-vira']);
+  });
+
+  it('тест брифу 7: після трьох спроб з 429 користувач в остаточних failed', async () => {
+    const tasks = [makeTask('t1', 'anna', 'Рахунок', '2026-03-05T10:00:00Z')];
+    const { deps, messenger } = setup(tasks, USERS);
+    messenger.failFor('chat-anna', 'rate_limited');
+
+    const report1 = await runDailyReminders(new Date('2026-03-10T08:00:00Z'), deps);
+    const report2 = await runDailyReminders(new Date('2026-03-10T08:15:00Z'), deps);
+    const report3 = await runDailyReminders(new Date('2026-03-10T08:30:00Z'), deps);
+    const report4 = await runDailyReminders(new Date('2026-03-10T08:45:00Z'), deps);
+
+    expect(report1.failed).toEqual([{ userId: 'anna', reason: 'rate_limited', final: false }]);
+    expect(report2.failed).toEqual([{ userId: 'anna', reason: 'rate_limited', final: false }]);
+    expect(report3.failed).toEqual([{ userId: 'anna', reason: 'rate_limited', final: true }]);
+    expect(report4.failed).toEqual([{ userId: 'anna', reason: 'attempts_exhausted', final: true }]);
+    expect(messenger.attempts).toEqual(['chat-anna', 'chat-anna', 'chat-anna']);
+    expect(messenger.sent).toEqual([]);
+  });
+
+  it('таймаут теж рахується як спроба', async () => {
+    const tasks = [makeTask('t1', 'anna', 'Рахунок', '2026-03-05T10:00:00Z')];
+    const { deps, messenger } = setup(tasks, USERS);
+    messenger.failFor('chat-anna', 'hang');
+
+    await runDailyReminders(NOW, deps);
+    await runDailyReminders(NOW, deps);
+    const report3 = await runDailyReminders(NOW, deps);
+
+    expect(report3.failed).toEqual([{ userId: 'anna', reason: 'timeout', final: true }]);
+    expect(await deps.attemptLog.count('anna', '2026-03-10')).toBe(3);
+  });
+
+  it('успіх після двох невдалих спроб доставляє повідомлення', async () => {
+    const tasks = [makeTask('t1', 'anna', 'Рахунок', '2026-03-05T10:00:00Z')];
+    const { deps, messenger } = setup(tasks, USERS);
+    messenger.failFor('chat-anna', 'rate_limited');
+
+    await runDailyReminders(NOW, deps);
+    await runDailyReminders(NOW, deps);
+    messenger.clearFailure('chat-anna');
+    const report3 = await runDailyReminders(NOW, deps);
+
+    expect(report3).toEqual({ sent: ['anna'], skipped: [], failed: [] });
+    expect(sentChatIds(messenger)).toEqual(['chat-anna']);
+  });
+});
