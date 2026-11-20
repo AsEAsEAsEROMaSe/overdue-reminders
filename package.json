@@ -1,0 +1,15 @@
+{
+  "name": "overdue-reminders",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node node_modules/vitest/vitest.mjs run",
+    "typecheck": "node node_modules/typescript/bin/tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.1"
+  }
+}
