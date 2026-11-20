@@ -14,10 +14,13 @@
  */
 
 import type { TaskRepo, UserRepo, Messenger, SentLog, AttemptLog, Lock } from './ports.ts';
+import { TelegramError } from './types.ts';
 import type { RunReport } from './types.ts';
 import { kyivDay } from './time.ts';
 import { groupOverdueByUser } from './overdue.ts';
 import { buildReminderText } from './format.ts';
+
+const DEFAULT_SEND_TIMEOUT_MS = 10000;
 
 export interface RunDeps {
   taskRepo: TaskRepo;
@@ -64,10 +67,62 @@ async function sendReminders(now: Date, day: string, deps: RunDeps): Promise<Run
       continue;
     }
     const text = buildReminderText(group.tasks);
-    await deps.messenger.send(user.telegramChatId, text);
+    let outcome = '';
+    try {
+      outcome = await sendWithTimeout(deps.messenger, user.telegramChatId, text, getTimeoutMs(deps));
+    } catch (error) {
+      // Збій одному користувачу не зупиняє решту; mark не ставимо, наступний запуск повторить
+      report.failed.push({ userId: group.userId, reason: getErrorReason(error), final: false });
+      continue;
+    }
+    if (outcome === 'timeout') {
+      report.failed.push({ userId: group.userId, reason: 'timeout', final: false });
+      continue;
+    }
     await deps.sentLog.mark(group.userId, day);
     report.sent.push(group.userId);
   }
 
   return report;
+}
+
+function getTimeoutMs(deps: RunDeps): number {
+  if (deps.sendTimeoutMs === undefined) {
+    return DEFAULT_SEND_TIMEOUT_MS;
+  }
+  return deps.sendTimeoutMs;
+}
+
+// Причина збою для звіту: 429 rate_limited, 403 blocked, інше error
+function getErrorReason(error: unknown): string {
+  if (error instanceof TelegramError) {
+    if (error.code === 429) {
+      return 'rate_limited';
+    }
+    if (error.code === 403) {
+      return 'blocked';
+    }
+  }
+  return 'error';
+}
+
+async function sendAndConfirm(messenger: Messenger, chatId: string, text: string): Promise<string> {
+  await messenger.send(chatId, text);
+  return 'sent';
+}
+
+// Шле повідомлення; повертає 'sent' або 'timeout'; помилку Telegram кидає далі
+async function sendWithTimeout(messenger: Messenger, chatId: string, text: string, timeoutMs: number): Promise<string> {
+  let timer: ReturnType<typeof setTimeout> | undefined = undefined;
+  const timeoutPromise = new Promise<string>((resolve) => {
+    timer = setTimeout(() => {
+      resolve('timeout');
+    }, timeoutMs);
+  });
+  const sendPromise = sendAndConfirm(messenger, chatId, text);
+  try {
+    return await Promise.race([sendPromise, timeoutPromise]);
+  } finally {
+    clearTimeout(timer);
+  }
 }

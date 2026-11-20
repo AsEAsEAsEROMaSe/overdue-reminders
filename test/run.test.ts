@@ -173,3 +173,59 @@ describe('runDailyReminders: блокування', () => {
     expect(messenger.sent.length).toBe(3);
   });
 });
+
+describe('runDailyReminders: збої доставки', () => {
+  it('тест брифу 6: збій одному з трьох не зупиняє решту, наступний запуск шле лише йому', async () => {
+    const { deps, messenger } = setup(threeOverdueTasks(), USERS);
+    messenger.failFor('chat-bohdan', 'rate_limited');
+
+    const firstReport = await runDailyReminders(NOW, deps);
+
+    expect(sentChatIds(messenger)).toEqual(['chat-anna', 'chat-vira']);
+    expect(firstReport).toEqual({
+      sent: ['anna', 'vira'],
+      skipped: [],
+      failed: [{ userId: 'bohdan', reason: 'rate_limited', final: false }],
+    });
+    expect(await deps.sentLog.has('bohdan', '2026-03-10')).toBe(false);
+    expect(await deps.sentLog.has('anna', '2026-03-10')).toBe(true);
+
+    messenger.clearFailure('chat-bohdan');
+    const secondReport = await runDailyReminders(LATER_SAME_DAY, deps);
+
+    expect(secondReport).toEqual({ sent: ['bohdan'], skipped: [], failed: [] });
+    expect(sentChatIds(messenger)).toEqual(['chat-anna', 'chat-vira', 'chat-bohdan']);
+  });
+
+  it('відповідь, що не прийшла вчасно, обривається таймаутом і не зупиняє решту', async () => {
+    const { deps, messenger } = setup(threeOverdueTasks(), USERS);
+    messenger.failFor('chat-anna', 'hang');
+
+    const report = await runDailyReminders(NOW, deps);
+
+    expect(report).toEqual({
+      sent: ['bohdan', 'vira'],
+      skipped: [],
+      failed: [{ userId: 'anna', reason: 'timeout', final: false }],
+    });
+    expect(await deps.sentLog.has('anna', '2026-03-10')).toBe(false);
+  });
+
+  it('невідома помилка месенджера записується як error', async () => {
+    const { deps } = setup(threeOverdueTasks(), USERS);
+    deps.messenger = {
+      async send() {
+        throw new Error('мережа впала');
+      },
+    };
+
+    const report = await runDailyReminders(NOW, deps);
+
+    expect(report.sent).toEqual([]);
+    expect(report.failed).toEqual([
+      { userId: 'anna', reason: 'error', final: false },
+      { userId: 'bohdan', reason: 'error', final: false },
+      { userId: 'vira', reason: 'error', final: false },
+    ]);
+  });
+});
