@@ -54,6 +54,15 @@ function threeOverdueTasks(): Task[] {
   ];
 }
 
+// chat_id усіх доставлених повідомлень по порядку
+function sentChatIds(messenger: MessengerMock): string[] {
+  const result: string[] = [];
+  for (const message of messenger.sent) {
+    result.push(message.chatId);
+  }
+  return result;
+}
+
 interface TestSetup {
   deps: RunDeps;
   messenger: MessengerMock;
@@ -131,5 +140,36 @@ describe('runDailyReminders: дублі і паралельний запуск',
 
     expect(messenger.sent.length).toBe(6);
     expect(nextReport.sent).toEqual(['anna', 'bohdan', 'vira']);
+  });
+});
+
+describe('runDailyReminders: блокування', () => {
+  it('тест брифу 5: два запуски одночасно, кожен користувач отримує рівно одне повідомлення', async () => {
+    const { deps, messenger } = setup(threeOverdueTasks(), USERS);
+
+    const firstRun = runDailyReminders(NOW, deps);
+    const secondRun = runDailyReminders(NOW, deps);
+    const reports = await Promise.all([firstRun, secondRun]);
+
+    expect(sentChatIds(messenger)).toEqual(['chat-anna', 'chat-bohdan', 'chat-vira']);
+    expect(reports[0]).toEqual({ sent: ['anna', 'bohdan', 'vira'], skipped: [], failed: [] });
+    expect(reports[1]).toEqual({ sent: [], skipped: [], failed: [] });
+  });
+
+  it('блокування знімається навіть після помилки, наступний запуск працює', async () => {
+    const { deps, messenger } = setup(threeOverdueTasks(), USERS);
+    const realTaskRepo = deps.taskRepo;
+    deps.taskRepo = {
+      async listNotDone() {
+        throw new Error('база недоступна');
+      },
+    };
+
+    await expect(runDailyReminders(NOW, deps)).rejects.toThrow('база недоступна');
+
+    deps.taskRepo = realTaskRepo;
+    const report = await runDailyReminders(LATER_SAME_DAY, deps);
+    expect(report.sent).toEqual(['anna', 'bohdan', 'vira']);
+    expect(messenger.sent.length).toBe(3);
   });
 });

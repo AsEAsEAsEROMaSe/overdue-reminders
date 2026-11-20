@@ -30,9 +30,26 @@ export interface RunDeps {
   sendTimeoutMs?: number;
 }
 
+// Один запуск; якщо інший запуск того ж дня вже йде, нічого не робить
 export async function runDailyReminders(now: Date, deps: RunDeps): Promise<RunReport> {
-  const report: RunReport = { sent: [], skipped: [], failed: [] };
   const day = kyivDay(now);
+  const lockKey = 'daily-reminders:' + day;
+
+  const acquired = await deps.lock.acquire(lockKey);
+  if (!acquired) {
+    return { sent: [], skipped: [], failed: [] };
+  }
+
+  try {
+    return await sendReminders(now, day, deps);
+  } finally {
+    await deps.lock.release(lockKey);
+  }
+}
+
+// Вибирає прострочені задачі і шле кожному виконавцю одне повідомлення
+async function sendReminders(now: Date, day: string, deps: RunDeps): Promise<RunReport> {
+  const report: RunReport = { sent: [], skipped: [], failed: [] };
 
   const tasks = await deps.taskRepo.listNotDone();
   const overdue = groupOverdueByUser(tasks, now);
