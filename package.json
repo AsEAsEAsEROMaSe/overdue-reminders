@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "test": "node node_modules/vitest/vitest.mjs run",
-    "typecheck": "node node_modules/typescript/bin/tsc --noEmit"
+    "typecheck": "node node_modules/typescript/bin/tsc --noEmit",
+    "check:headers": "node scripts/check-headers.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",
