@@ -9,7 +9,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { buildReminderText } from '../src/format.ts';
-import { makeTask } from './builders.ts';
+import { makeTask, freezeTasks } from './builders.ts';
 
 describe('buildReminderText', () => {
   it('одна задача: заголовок і один пункт', () => {
@@ -65,5 +65,16 @@ describe('buildReminderText', () => {
     buildReminderText(tasks);
 
     expect(tasks).toEqual([newer, older]);
+  });
+
+  it('працює із замороженим масивом: сортує копію, а не вхідний масив', () => {
+    const tasks = freezeTasks([
+      makeTask('t1', 'u1', 'Б', '2026-03-05T09:15:00Z'),
+      makeTask('t2', 'u1', 'А', '2026-02-27T22:00:00Z'),
+    ]);
+
+    const text = buildReminderText(tasks);
+
+    expect(text).toBe('Прострочені задачі: 2\n1. А (дедлайн 28.02.2026 00:00)\n2. Б (дедлайн 05.03.2026 11:15)');
   });
 });

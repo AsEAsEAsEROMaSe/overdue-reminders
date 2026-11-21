@@ -61,3 +61,21 @@ export function makeUserWithoutChatId(id: string): User {
   const oldRecord = { id: id };
   return oldRecord as unknown as User;
 }
+
+// Заморожує задачі і сам масив: будь-яка спроба змінити їх кине TypeError
+export function freezeTasks(tasks: Task[]): Task[] {
+  for (const task of tasks) {
+    Object.freeze(task);
+  }
+  Object.freeze(tasks);
+  return tasks;
+}
+
+// Заморожує користувачів і сам масив
+export function freezeUsers(users: User[]): User[] {
+  for (const user of users) {
+    Object.freeze(user);
+  }
+  Object.freeze(users);
+  return users;
+}

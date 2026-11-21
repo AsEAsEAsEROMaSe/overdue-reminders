@@ -67,6 +67,12 @@ const MUTATIONS = [
     to: '      return undefined;',
   },
   {
+    name: 'сортуємо вхідний масив без копії',
+    file: 'src/format.ts',
+    from: 'const sorted = tasks.slice();',
+    to: 'const sorted = tasks;',
+  },
+  {
     name: 'немає сортування за дедлайном',
     file: 'src/format.ts',
     from: '  sorted.sort(compareByDeadline);\n',

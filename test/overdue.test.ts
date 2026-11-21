@@ -15,6 +15,7 @@ import {
   makeDoneTask,
   makeTaskWithoutDeadline,
   makeTaskWithoutAssignee,
+  freezeTasks,
 } from './builders.ts';
 
 // 10:00 10 березня 2026 за Києвом (зимовий час, UTC+2); доба почалась о 22:00 UTC 9 березня
@@ -155,5 +156,35 @@ describe('groupOverdueByUser: погані дані (тест брифу 8, ча
 
     expect(result.groups).toEqual([]);
     expect(result.skipped).toEqual([{ kind: 'task', id: 't1', reason: 'no_assignee' }]);
+  });
+});
+
+describe('groupOverdueByUser: вхідні дані не змінюються', () => {
+  it('вхідний масив і задачі лишаються як були', () => {
+    const tasks = freezeTasks([
+      makeTask('t1', 'u1', 'Стара', '2026-03-01T10:00:00Z'),
+      makeTask('t2', 'u2', 'Сьогоднішня', '2026-03-10T05:00:00Z'),
+      makeDoneTask('t3', 'u1', 'Зроблена', '2026-03-01T10:00:00Z'),
+      makeTaskWithoutDeadline('t4', 'u1'),
+      makeTaskWithoutAssignee('t5', '2026-03-01T10:00:00Z'),
+    ]);
+
+    groupOverdueByUser(tasks, NOW);
+
+    expect(tasks).toEqual([
+      makeTask('t1', 'u1', 'Стара', '2026-03-01T10:00:00Z'),
+      makeTask('t2', 'u2', 'Сьогоднішня', '2026-03-10T05:00:00Z'),
+      makeDoneTask('t3', 'u1', 'Зроблена', '2026-03-01T10:00:00Z'),
+      makeTaskWithoutDeadline('t4', 'u1'),
+      makeTaskWithoutAssignee('t5', '2026-03-01T10:00:00Z'),
+    ]);
+  });
+
+  it('групи містять ті самі задачі, а не змінені копії', () => {
+    const task = makeTask('t1', 'u1', 'Стара', '2026-03-01T10:00:00Z');
+
+    const result = groupOverdueByUser(freezeTasks([task]), NOW);
+
+    expect(result.groups[0].tasks[0]).toBe(task);
   });
 });

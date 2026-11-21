@@ -22,6 +22,8 @@ import {
   makeTaskWithoutAssignee,
   makeUser,
   makeUserWithoutChatId,
+  freezeTasks,
+  freezeUsers,
 } from './builders.ts';
 
 // 10:00 10 березня 2026 за Києвом
@@ -601,5 +603,52 @@ describe('runDailyReminders: погані дані', () => {
     expect(messenger.sent).toEqual([
       { chatId: 'chat-bohdan', text: 'Прострочені задачі: 1\n1. Вчорашня (дедлайн 09.03.2026 22:00)' },
     ]);
+  });
+});
+
+describe('runDailyReminders: вхідні дані не змінюються', () => {
+  it('задачі і користувачі лишаються як були після двох запусків зі збоями', async () => {
+    const tasks = freezeTasks([
+      makeTask('t1', 'anna', 'Рахунок', '2026-03-05T10:00:00Z'),
+      makeTask('t2', 'bohdan', 'Звіт', '2026-03-06T10:00:00Z'),
+      makeTask('t3', 'vira', 'Договір', '2026-03-07T10:00:00Z'),
+      makeTaskWithoutDeadline('t4', 'anna'),
+    ]);
+    const users = freezeUsers([makeUser('anna'), makeUser('bohdan'), makeUserWithoutChatId('vira')]);
+    const messenger = new FakeMessenger();
+    messenger.failFor('chat-bohdan', 'blocked');
+    const deps = makeDeps(tasks, users, messenger);
+
+    await runDailyReminders(NOW, deps);
+    await runDailyReminders(LATER_SAME_DAY, deps);
+
+    expect(tasks).toEqual([
+      makeTask('t1', 'anna', 'Рахунок', '2026-03-05T10:00:00Z'),
+      makeTask('t2', 'bohdan', 'Звіт', '2026-03-06T10:00:00Z'),
+      makeTask('t3', 'vira', 'Договір', '2026-03-07T10:00:00Z'),
+      makeTaskWithoutDeadline('t4', 'anna'),
+    ]);
+    expect(users).toEqual([makeUser('anna'), makeUser('bohdan'), makeUserWithoutChatId('vira')]);
+  });
+
+  it('кожен запуск повертає новий звіт: зміна одного не зачіпає інший', async () => {
+    const deps = makeDeps(threeOverdueTasks(), USERS, new FakeMessenger());
+    const firstReport = await runDailyReminders(NOW, deps);
+
+    firstReport.sent.push('чужий');
+    const secondReport = await runDailyReminders(LATER_SAME_DAY, deps);
+
+    expect(secondReport).toEqual(EMPTY_REPORT);
+  });
+
+  it('звіт при зайнятому блокуванні теж новий щоразу', async () => {
+    const deps = makeDeps(threeOverdueTasks(), USERS, new FakeMessenger());
+    await deps.lock.acquire('daily-reminders:' + DAY);
+    const firstReport = await runDailyReminders(NOW, deps);
+
+    firstReport.sent.push('чужий');
+    const secondReport = await runDailyReminders(NOW, deps);
+
+    expect(secondReport).toEqual(EMPTY_REPORT);
   });
 });
