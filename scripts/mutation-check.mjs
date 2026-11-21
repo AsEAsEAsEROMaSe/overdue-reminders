@@ -87,8 +87,8 @@ const MUTATIONS = [
   {
     name: 'немає зовнішнього catch (збій сховища)',
     file: 'src/run.ts',
-    from: '    } catch (error) {\n      // Збій сховища',
-    to: '    } catch (error) {\n      throw error;\n      // Збій сховища',
+    from: '      } catch (error) {\n        // Збій сховища',
+    to: '      } catch (error) {\n        throw error;\n        // Збій сховища',
   },
   {
     name: 'немає внутрішнього catch (збій відправки)',
@@ -129,7 +129,7 @@ const MUTATIONS = [
   {
     name: '403 не остаточний',
     file: 'src/run.ts',
-    from: "  if (reason === 'blocked') {\n    final = true;\n  }\n",
+    from: "    if (reason === 'blocked') {\n      final = true;\n    }\n",
     to: '',
   },
   {
@@ -141,14 +141,20 @@ const MUTATIONS = [
   {
     name: 'немає таймауту',
     file: 'src/run.ts',
-    from: 'await Promise.race([messenger.send(chatId, text), timeout]);',
-    to: 'await messenger.send(chatId, text);',
+    from: '      reject(new SendTimeoutError());',
+    to: '',
   },
   {
-    name: 'таймер не прибирається',
+    name: 'таймер не прибирається після успіху',
     file: 'src/run.ts',
-    from: '    clearTimeout(timer);\n',
-    to: '',
+    from: '      clearTimeout(timer);\n      resolve();',
+    to: '      resolve();',
+  },
+  {
+    name: 'таймер не прибирається після помилки',
+    file: 'src/run.ts',
+    from: '      clearTimeout(timer);\n      reject(error);',
+    to: '      reject(error);',
   },
 ];
 

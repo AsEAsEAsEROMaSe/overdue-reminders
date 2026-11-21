@@ -382,6 +382,26 @@ describe('runDailyReminders: таймаут відправки', () => {
 
     expect(vi.getTimerCount()).toBe(0);
   });
+
+  it('після 403 таймер таймауту прибрано', async () => {
+    vi.useFakeTimers();
+    const messenger = new FakeMessenger();
+    const deps = makeDeps(oneOverdueTaskForAnna(), USERS, messenger);
+    messenger.failFor('chat-anna', 'blocked');
+
+    await runDailyReminders(NOW, deps);
+
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('після однієї успішної відправки таймер таймауту прибрано', async () => {
+    vi.useFakeTimers();
+    const deps = makeDeps(oneOverdueTaskForAnna(), USERS, new FakeMessenger());
+
+    await runDailyReminders(NOW, deps);
+
+    expect(vi.getTimerCount()).toBe(0);
+  });
 });
 
 describe('runDailyReminders: коди Telegram і ліміт спроб', () => {
