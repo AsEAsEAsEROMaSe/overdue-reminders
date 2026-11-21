@@ -15,12 +15,11 @@
 
 import type { TaskRepo, UserRepo, Messenger, SentLog, AttemptLog, Lock } from './ports.ts';
 import { TelegramError } from './types.ts';
-import type { RunReport } from './types.ts';
+import type { RunReport, UserTasks } from './types.ts';
 import { kyivDay } from './time.ts';
 import { groupOverdueByUser } from './overdue.ts';
 import { buildReminderText } from './format.ts';
 
-const DEFAULT_SEND_TIMEOUT_MS = 10000;
 const MAX_ATTEMPTS = 3;
 
 export interface RunDeps {
@@ -30,9 +29,12 @@ export interface RunDeps {
   sentLog: SentLog;
   attemptLog: AttemptLog;
   lock: Lock;
-  // Скільки чекати відповіді Telegram; за замовчуванням 10 секунд
-  sendTimeoutMs?: number;
+  // Скільки чекати відповіді Telegram, мс (наприклад 10000)
+  sendTimeoutMs: number;
 }
+
+// Telegram не відповів вчасно
+class SendTimeoutError extends Error {}
 
 // Один запуск; якщо інший запуск того ж дня вже йде, нічого не робить
 export async function runDailyReminders(now: Date, deps: RunDeps): Promise<RunReport> {
@@ -51,7 +53,7 @@ export async function runDailyReminders(now: Date, deps: RunDeps): Promise<RunRe
   }
 }
 
-// Вибирає прострочені задачі і шле кожному виконавцю одне повідомлення
+// Вибирає прострочені задачі і по черзі обробляє кожного виконавця
 async function sendReminders(now: Date, day: string, deps: RunDeps): Promise<RunReport> {
   const report: RunReport = { sent: [], skipped: [], failed: [] };
 
@@ -62,72 +64,82 @@ async function sendReminders(now: Date, day: string, deps: RunDeps): Promise<Run
   }
 
   for (const group of overdue.groups) {
-    const user = await deps.userRepo.get(group.userId);
-    if (user === undefined) {
-      report.skipped.push({ kind: 'user', id: group.userId, reason: 'user_not_found' });
-      continue;
-    }
-    if (!user.telegramChatId) {
-      report.skipped.push({ kind: 'user', id: group.userId, reason: 'no_chat_id' });
-      continue;
-    }
-    const alreadySent = await deps.sentLog.has(group.userId, day);
-    if (alreadySent) {
-      continue;
-    }
-
-    // Не більше MAX_ATTEMPTS спроб на користувача за день
-    const attemptsBefore = await deps.attemptLog.count(group.userId, day);
-    if (attemptsBefore >= MAX_ATTEMPTS) {
-      report.failed.push({ userId: group.userId, reason: 'attempts_exhausted', final: true });
-      continue;
-    }
-    const attempts = attemptsBefore + 1;
-    await deps.attemptLog.set(group.userId, day, attempts);
-
-    const text = buildReminderText(group.tasks);
-    let outcome = '';
-    try {
-      outcome = await sendWithTimeout(deps.messenger, user.telegramChatId, text, getTimeoutMs(deps));
-    } catch (error) {
-      // Збій одному користувачу не зупиняє решту; mark не ставимо, наступний запуск повторить
-      const reason = getErrorReason(error);
-      if (reason === 'blocked') {
-        // 403: бот заблокований, сьогодні більше не пробуємо
-        await deps.attemptLog.set(group.userId, day, MAX_ATTEMPTS);
-        report.failed.push({ userId: group.userId, reason: reason, final: true });
-        continue;
-      }
-      report.failed.push({ userId: group.userId, reason: reason, final: isLastAttempt(attempts) });
-      continue;
-    }
-    if (outcome === 'timeout') {
-      report.failed.push({ userId: group.userId, reason: 'timeout', final: isLastAttempt(attempts) });
-      continue;
-    }
-    await deps.sentLog.mark(group.userId, day);
-    report.sent.push(group.userId);
+    await remindUser(group, day, deps, report);
   }
 
   return report;
 }
 
-function isLastAttempt(attempts: number): boolean {
+// Шле одному виконавцю повідомлення з його задачами і записує результат у звіт
+async function remindUser(group: UserTasks, day: string, deps: RunDeps, report: RunReport): Promise<void> {
+  const userId = group.userId;
+
+  const user = await deps.userRepo.get(userId);
+  if (user === undefined) {
+    report.skipped.push({ kind: 'user', id: userId, reason: 'user_not_found' });
+    return;
+  }
+  if (!user.telegramChatId) {
+    report.skipped.push({ kind: 'user', id: userId, reason: 'no_chat_id' });
+    return;
+  }
+
+  const alreadySent = await deps.sentLog.has(userId, day);
+  if (alreadySent) {
+    return;
+  }
+
+  const attemptsBefore = await deps.attemptLog.count(userId, day);
+  if (attemptsBefore >= MAX_ATTEMPTS) {
+    report.failed.push({ userId: userId, reason: 'attempts_exhausted', final: true });
+    return;
+  }
+  const attempts = attemptsBefore + 1;
+  await deps.attemptLog.set(userId, day, attempts);
+
+  const text = buildReminderText(group.tasks);
+  try {
+    await sendWithTimeout(deps.messenger, user.telegramChatId, text, deps.sendTimeoutMs);
+  } catch (error) {
+    // mark не ставимо: наступний запуск того дня повторить
+    await recordFailure(error, userId, attempts, day, deps, report);
+    return;
+  }
+
+  await deps.sentLog.mark(userId, day);
+  report.sent.push(userId);
+}
+
+// Записує невдалу відправку у звіт
+async function recordFailure(
+  error: unknown,
+  userId: string,
+  attempts: number,
+  day: string,
+  deps: RunDeps,
+  report: RunReport,
+): Promise<void> {
+  const reason = getErrorReason(error);
+
+  if (reason === 'blocked') {
+    // 403: бот заблокований, сьогодні більше не пробуємо
+    await deps.attemptLog.set(userId, day, MAX_ATTEMPTS);
+    report.failed.push({ userId: userId, reason: reason, final: true });
+    return;
+  }
+
+  let final = false;
   if (attempts >= MAX_ATTEMPTS) {
-    return true;
+    final = true;
   }
-  return false;
+  report.failed.push({ userId: userId, reason: reason, final: final });
 }
 
-function getTimeoutMs(deps: RunDeps): number {
-  if (deps.sendTimeoutMs === undefined) {
-    return DEFAULT_SEND_TIMEOUT_MS;
-  }
-  return deps.sendTimeoutMs;
-}
-
-// Причина збою для звіту: 429 rate_limited, 403 blocked, інше error
+// Причина збою для звіту
 function getErrorReason(error: unknown): string {
+  if (error instanceof SendTimeoutError) {
+    return 'timeout';
+  }
   if (error instanceof TelegramError) {
     if (error.code === 429) {
       return 'rate_limited';
@@ -139,22 +151,17 @@ function getErrorReason(error: unknown): string {
   return 'error';
 }
 
-async function sendAndConfirm(messenger: Messenger, chatId: string, text: string): Promise<string> {
-  await messenger.send(chatId, text);
-  return 'sent';
-}
-
-// Шле повідомлення; повертає 'sent' або 'timeout'; помилку Telegram кидає далі
-async function sendWithTimeout(messenger: Messenger, chatId: string, text: string, timeoutMs: number): Promise<string> {
-  let timer: ReturnType<typeof setTimeout> | undefined = undefined;
-  const timeoutPromise = new Promise<string>((resolve) => {
+// Шле повідомлення; якщо відповіді немає за timeoutMs, кидає SendTimeoutError
+async function sendWithTimeout(messenger: Messenger, chatId: string, text: string, timeoutMs: number): Promise<void> {
+  let timer: NodeJS.Timeout | undefined = undefined;
+  const timeout = new Promise<void>((resolve, reject) => {
     timer = setTimeout(() => {
-      resolve('timeout');
+      reject(new SendTimeoutError());
     }, timeoutMs);
   });
-  const sendPromise = sendAndConfirm(messenger, chatId, text);
+
   try {
-    return await Promise.race([sendPromise, timeoutPromise]);
+    await Promise.race([messenger.send(chatId, text), timeout]);
   } finally {
     clearTimeout(timer);
   }
