@@ -24,15 +24,12 @@ export function buildReminderText(tasks: Task[]): string {
   const sorted = tasks.slice();
   sorted.sort(compareByDeadline);
 
-  const lines: string[] = [];
-  lines.push('Прострочені задачі: ' + sorted.length);
-  for (let i = 0; i < sorted.length; i++) {
-    const task = sorted[i];
-    if (task === undefined) {
-      continue;
-    }
-    const number = i + 1;
-    lines.push(number + '. ' + task.title + ' (дедлайн ' + formatKyivDate(task.deadline) + ')');
+  let text = 'Прострочені задачі: ' + sorted.length;
+  let number = 1;
+  for (const task of sorted) {
+    const deadline = formatKyivDate(task.deadline);
+    text = text + '\n' + number + '. ' + task.title + ' (дедлайн ' + deadline + ')';
+    number = number + 1;
   }
-  return lines.join('\n');
+  return text;
 }
