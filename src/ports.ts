@@ -32,10 +32,15 @@ export interface SentLog {
   mark(userId: string, day: string): Promise<void>;
 }
 
-// Скільки спроб відправки було в користувача за день
+// Спроби відправки користувачу за день
 export interface AttemptLog {
+  // Скільки спроб уже було
   count(userId: string, day: string): Promise<number>;
-  set(userId: string, day: string, count: number): Promise<void>;
+  // Додати одну спробу
+  add(userId: string, day: string): Promise<void>;
+  // Більше сьогодні не пробувати (403 або вичерпано спроби)
+  stop(userId: string, day: string): Promise<void>;
+  isStopped(userId: string, day: string): Promise<boolean>;
 }
 
 export interface Lock {

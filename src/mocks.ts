@@ -102,6 +102,7 @@ export function createSentLog(): SentLog {
 
 export function createAttemptLog(): AttemptLog {
   const counts = new Map<string, number>();
+  const stopped = new Set<string>();
   return {
     async count(userId: string, day: string) {
       const value = counts.get(userId + '|' + day);
@@ -110,8 +111,19 @@ export function createAttemptLog(): AttemptLog {
       }
       return value;
     },
-    async set(userId: string, day: string, count: number) {
-      counts.set(userId + '|' + day, count);
+    async add(userId: string, day: string) {
+      const key = userId + '|' + day;
+      let value = counts.get(key);
+      if (value === undefined) {
+        value = 0;
+      }
+      counts.set(key, value + 1);
+    },
+    async stop(userId: string, day: string) {
+      stopped.add(userId + '|' + day);
+    },
+    async isStopped(userId: string, day: string) {
+      return stopped.has(userId + '|' + day);
     },
   };
 }

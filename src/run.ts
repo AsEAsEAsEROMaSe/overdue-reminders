@@ -94,13 +94,13 @@ async function remindUser(group: UserTasks, day: string, deps: RunDeps, report: 
     return;
   }
 
-  const attemptsBefore = await deps.attemptLog.count(userId, day);
-  if (attemptsBefore >= MAX_ATTEMPTS) {
+  const stopped = await deps.attemptLog.isStopped(userId, day);
+  if (stopped) {
     report.failed.push({ userId: userId, reason: 'attempts_exhausted', final: true });
     return;
   }
-  const attempts = attemptsBefore + 1;
-  await deps.attemptLog.set(userId, day, attempts);
+  await deps.attemptLog.add(userId, day);
+  const attempts = await deps.attemptLog.count(userId, day);
 
   const text = buildReminderText(group.tasks);
   try {
@@ -126,16 +126,17 @@ async function recordFailure(
 ): Promise<void> {
   const reason = getErrorReason(error);
 
-  if (reason === 'blocked') {
-    // 403: бот заблокований, сьогодні більше не пробуємо
-    await deps.attemptLog.set(userId, day, MAX_ATTEMPTS);
-    report.failed.push({ userId: userId, reason: reason, final: true });
-    return;
-  }
-
+  // 403 (бот заблокований) або остання спроба: сьогодні більше не пробуємо
   let final = false;
+  if (reason === 'blocked') {
+    final = true;
+  }
   if (attempts >= MAX_ATTEMPTS) {
     final = true;
+  }
+
+  if (final) {
+    await deps.attemptLog.stop(userId, day);
   }
   report.failed.push({ userId: userId, reason: reason, final: final });
 }

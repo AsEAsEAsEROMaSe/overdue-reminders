@@ -268,7 +268,7 @@ describe('runDailyReminders: коди Telegram і ліміт спроб', () => 
     messenger.failFor('chat-anna', 'blocked');
 
     await runDailyReminders(NOW, deps);
-    expect(await deps.attemptLog.count('anna', '2026-03-10')).toBe(3);
+    expect(await deps.attemptLog.isStopped('anna', '2026-03-10')).toBe(true);
 
     messenger.clearFailure('chat-anna');
     const secondReport = await runDailyReminders(LATER_SAME_DAY, deps);
