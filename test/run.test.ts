@@ -363,6 +363,16 @@ describe('runDailyReminders: таймаут відправки', () => {
     expect(report).toEqual({ sent: ['anna'], skipped: [], failed: [] });
   });
 
+  it('після невдалої відправки таймер таймауту теж прибрано', async () => {
+    vi.useFakeTimers();
+    const { deps, messenger } = setup(oneOverdueTaskForAnna(), USERS);
+    messenger.failFor('chat-anna', 'rate_limited');
+
+    await runDailyReminders(NOW, deps);
+
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it('після успішної відправки таймер таймауту прибрано', async () => {
     vi.useFakeTimers();
     const { deps } = setup(threeOverdueTasks(), USERS);
@@ -486,6 +496,23 @@ describe('runDailyReminders: погані дані', () => {
         { kind: 'user', id: 'hryhorii', reason: 'no_chat_id' },
         { kind: 'user', id: 'nobody', reason: 'user_not_found' },
       ],
+      failed: [],
+    });
+    expect(messenger.attempts).toEqual(['chat-anna']);
+  });
+
+  it('задачі виконавця, якого немає серед користувачів, у skipped, решта отримують', async () => {
+    const tasks = [
+      makeTask('t1', 'ghost', 'Привид', '2026-03-05T10:00:00Z'),
+      makeTask('t2', 'anna', 'Рахунок', '2026-03-05T10:00:00Z'),
+    ];
+    const { deps, messenger } = setup(tasks, USERS);
+
+    const report = await runDailyReminders(NOW, deps);
+
+    expect(report).toEqual({
+      sent: ['anna'],
+      skipped: [{ kind: 'user', id: 'ghost', reason: 'user_not_found' }],
       failed: [],
     });
     expect(messenger.attempts).toEqual(['chat-anna']);
