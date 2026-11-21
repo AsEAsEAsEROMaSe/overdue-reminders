@@ -39,7 +39,7 @@ function findGroup(groups: UserTasks[], userId: string): UserTasks | undefined {
 }
 
 // Прострочена: дедлайн раніше за початок поточної доби за Києвом і статус не done
-export function groupOverdueByUser(tasks: Task[], now: Date): OverdueResult {
+export function groupOverdueByUser(tasks: readonly Task[], now: Date): OverdueResult {
   const dayStart = startOfKyivDay(now);
   const groups: UserTasks[] = [];
   const skipped: SkippedItem[] = [];

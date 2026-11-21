@@ -11,36 +11,43 @@
  * @see {@link ../src/types.ts}
  */
 
-import type { Task, User } from '../src/types.ts';
+import type { Task, TaskStatus, User } from '../src/types.ts';
 
-// Відкрита задача з дедлайном у форматі ISO (UTC)
-export function makeTask(id: string, assigneeId: string, title: string, deadlineIso: string): Task {
+// Задача з усіма полями; дедлайн у форматі ISO (UTC)
+function buildTask(id: string, assigneeId: string, title: string, deadlineIso: string, status: TaskStatus): Task {
   const task: Task = {
     id: id,
     assigneeId: assigneeId,
     title: title,
     deadline: new Date(deadlineIso),
-    status: 'open',
+    status: status,
   };
   return task;
 }
 
+// Відкрита задача
+export function makeTask(id: string, assigneeId: string, title: string, deadlineIso: string): Task {
+  return buildTask(id, assigneeId, title, deadlineIso, 'open');
+}
+
 export function makeTaskInProgress(id: string, assigneeId: string, title: string, deadlineIso: string): Task {
-  const task = makeTask(id, assigneeId, title, deadlineIso);
-  task.status = 'in_progress';
-  return task;
+  return buildTask(id, assigneeId, title, deadlineIso, 'in_progress');
 }
 
 export function makeDoneTask(id: string, assigneeId: string, title: string, deadlineIso: string): Task {
-  const task = makeTask(id, assigneeId, title, deadlineIso);
-  task.status = 'done';
-  return task;
+  return buildTask(id, assigneeId, title, deadlineIso, 'done');
 }
 
 // Старий запис з бази без поля deadline. Типи такого не дозволяють,
 // тому обходимо їх навмисно: саме так дані приходять з бази
 export function makeTaskWithoutDeadline(id: string, assigneeId: string): Task {
   const oldRecord = { id: id, assigneeId: assigneeId, title: 'Старий запис', status: 'open' };
+  return oldRecord as unknown as Task;
+}
+
+// Старий виконаний запис з бази без поля deadline
+export function makeDoneTaskWithoutDeadline(id: string, assigneeId: string): Task {
+  const oldRecord = { id: id, assigneeId: assigneeId, title: 'Старий запис', status: 'done' };
   return oldRecord as unknown as Task;
 }
 

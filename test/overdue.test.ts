@@ -14,6 +14,7 @@ import {
   makeTaskInProgress,
   makeDoneTask,
   makeTaskWithoutDeadline,
+  makeDoneTaskWithoutDeadline,
   makeTaskWithoutAssignee,
   freezeTasks,
 } from './builders.ts';
@@ -92,8 +93,7 @@ describe('groupOverdueByUser: що вважається простроченим
   });
 
   it('задача done без дедлайну просто ігнорується, у skipped не йде', () => {
-    const doneOld = makeTaskWithoutDeadline('old', 'u1');
-    doneOld.status = 'done';
+    const doneOld = makeDoneTaskWithoutDeadline('old', 'u1');
 
     const result = groupOverdueByUser([doneOld], NOW);
 

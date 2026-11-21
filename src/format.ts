@@ -20,7 +20,7 @@ function compareByDeadline(a: Task, b: Task): number {
 }
 
 // Будує текст: задачі від найстарішого дедлайну, дата за Києвом
-export function buildReminderText(tasks: Task[]): string {
+export function buildReminderText(tasks: readonly Task[]): string {
   const sorted = tasks.slice();
   sorted.sort(compareByDeadline);
 

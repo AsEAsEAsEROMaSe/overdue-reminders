@@ -15,39 +15,43 @@
 
 export type TaskStatus = 'open' | 'in_progress' | 'done';
 
+// readonly: дані приходять зі сховища, код їх лише читає.
+// Спробу змінити поле tsc зловить ще до запуску
 export interface Task {
-  id: string;
-  assigneeId: string;
-  title: string;
-  deadline: Date;
-  status: TaskStatus;
+  readonly id: string;
+  readonly assigneeId: string;
+  readonly title: string;
+  readonly deadline: Date;
+  readonly status: TaskStatus;
 }
 
 export interface User {
-  id: string;
-  telegramChatId: string;
+  readonly id: string;
+  readonly telegramChatId: string;
 }
 
-// Задачі одного виконавця
+// Задачі одного виконавця.
+// Масив tasks звичайний: overdue.ts додає в нього задачі, поки збирає групу
 export interface UserTasks {
-  userId: string;
+  readonly userId: string;
   tasks: Task[];
 }
 
 // Пропущений запис: погана задача або поганий користувач
 export interface SkippedItem {
-  kind: 'task' | 'user';
-  id: string;
-  reason: string;
+  readonly kind: 'task' | 'user';
+  readonly id: string;
+  readonly reason: string;
 }
 
 // Невдала відправка; final = true означає, що сьогодні більше не пробуємо
 export interface FailedItem {
-  userId: string;
-  reason: string;
-  final: boolean;
+  readonly userId: string;
+  readonly reason: string;
+  readonly final: boolean;
 }
 
+// Звіт звичайний: запуск заповнює його по ходу
 export interface RunReport {
   sent: string[];
   skipped: SkippedItem[];
