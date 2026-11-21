@@ -416,3 +416,23 @@ describe('runDailyReminders: другий рубіж для статусу, ме
     expect(messenger.attempts).toEqual(['chat-bohdan']);
   });
 });
+
+describe('runDailyReminders: збій сховища для одного користувача', () => {
+  it('помилка UserRepo для одного користувача не зупиняє решту', async () => {
+    const { deps, messenger } = setup(threeOverdueTasks(), USERS);
+    const realUserRepo = deps.userRepo;
+    deps.userRepo = {
+      async get(id: string) {
+        if (id === 'bohdan') {
+          throw new Error('база недоступна');
+        }
+        return realUserRepo.get(id);
+      },
+    };
+
+    const report = await runDailyReminders(NOW, deps);
+
+    expect(sentChatIds(messenger)).toEqual(['chat-anna', 'chat-vira']);
+    expect(report.failed).toEqual([{ userId: 'bohdan', reason: 'error', final: false }]);
+  });
+});

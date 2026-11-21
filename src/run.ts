@@ -64,7 +64,12 @@ async function sendReminders(now: Date, day: string, deps: RunDeps): Promise<Run
   }
 
   for (const group of overdue.groups) {
-    await remindUser(group, day, deps, report);
+    try {
+      await remindUser(group, day, deps, report);
+    } catch (error) {
+      // Збій сховища для одного користувача не зупиняє решту
+      report.failed.push({ userId: group.userId, reason: 'error', final: false });
+    }
   }
 
   return report;
