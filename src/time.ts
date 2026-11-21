@@ -9,18 +9,18 @@
  * @see {@link ../test/time.test.ts}
  */
 
-const KYIV_TIME_ZONE = 'Europe/Kyiv';
 const REMINDER_HOUR = 10;
+const HOUR_MS = 60 * 60 * 1000;
 
+// Перетворює момент часу на дату і час за київським годинником.
 // hourCycle h23 дає години 00..23, ніколи не 24
 const kyivFormatter = new Intl.DateTimeFormat('en-GB', {
-  timeZone: KYIV_TIME_ZONE,
+  timeZone: 'Europe/Kyiv',
   year: 'numeric',
   month: '2-digit',
   day: '2-digit',
   hour: '2-digit',
   minute: '2-digit',
-  second: '2-digit',
   hourCycle: 'h23',
 });
 
@@ -30,56 +30,22 @@ interface KyivParts {
   day: string;
   hour: string;
   minute: string;
-  second: string;
 }
 
-// Розкладає момент часу на частини за київським годинником
+// Розкладає момент часу на рік, місяць, день, години, хвилини за Києвом
 function getKyivParts(date: Date): KyivParts {
-  const result: KyivParts = {
-    year: '',
-    month: '',
-    day: '',
-    hour: '',
-    minute: '',
-    second: '',
-  };
-  const parts = kyivFormatter.formatToParts(date);
-  for (const part of parts) {
-    if (part.type === 'year') {
-      result.year = part.value;
-    }
-    if (part.type === 'month') {
-      result.month = part.value;
-    }
-    if (part.type === 'day') {
-      result.day = part.value;
-    }
-    if (part.type === 'hour') {
-      result.hour = part.value;
-    }
-    if (part.type === 'minute') {
-      result.minute = part.value;
-    }
-    if (part.type === 'second') {
-      result.second = part.value;
-    }
+  const values: Record<string, string> = {};
+  for (const part of kyivFormatter.formatToParts(date)) {
+    values[part.type] = part.value;
   }
+  const result: KyivParts = {
+    year: values['year'],
+    month: values['month'],
+    day: values['day'],
+    hour: values['hour'],
+    minute: values['minute'],
+  };
   return result;
-}
-
-// Зсув Києва від UTC у мілісекундах у заданий момент (+2 або +3 години)
-function getKyivOffsetMs(date: Date): number {
-  const parts = getKyivParts(date);
-  const wallTimeAsUtc = Date.UTC(
-    Number(parts.year),
-    Number(parts.month) - 1,
-    Number(parts.day),
-    Number(parts.hour),
-    Number(parts.minute),
-    Number(parts.second),
-  );
-  const dateWithoutMs = Math.floor(date.getTime() / 1000) * 1000;
-  return wallTimeAsUtc - dateWithoutMs;
 }
 
 // Київська доба у форматі YYYY-MM-DD
@@ -88,14 +54,23 @@ export function kyivDay(date: Date): string {
   return parts.year + '-' + parts.month + '-' + parts.day;
 }
 
-// Момент початку київської доби (00:00 за Києвом), у якій лежить date
+// Момент 00:00 за Києвом тієї доби, у якій лежить date.
+// Київ завжди на 2 (зима) або 3 (літо) години попереду UTC,
+// тож пробуємо обидва варіанти і беремо той, де за Києвом рівно 00:00
 export function startOfKyivDay(date: Date): Date {
   const parts = getKyivParts(date);
-  const midnightAsUtc = Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day));
-  // Перехід на літній чи зимовий час у Києві не опівночі, тож зсув опівночі сталий
-  const firstGuess = midnightAsUtc - getKyivOffsetMs(new Date(midnightAsUtc));
-  const offset = getKyivOffsetMs(new Date(firstGuess));
-  return new Date(midnightAsUtc - offset);
+  const midnightUtc = Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day));
+  const offsets = [2, 3];
+  for (const hours of offsets) {
+    const candidate = new Date(midnightUtc - hours * HOUR_MS);
+    const candidateParts = getKyivParts(candidate);
+    if (candidateParts.hour === '00') {
+      if (candidateParts.minute === '00') {
+        return candidate;
+      }
+    }
+  }
+  throw new Error('Не вдалося знайти початок доби за Києвом');
 }
 
 // Чи зараз година нагадування (10:00..10:59 за Києвом)
