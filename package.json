@@ -7,10 +7,12 @@
     "test": "node node_modules/vitest/vitest.mjs run",
     "typecheck": "node node_modules/typescript/bin/tsc --noEmit",
     "check:headers": "node scripts/check-headers.mjs",
-    "check:mutations": "node scripts/mutation-check.mjs"
+    "check:mutations": "node scripts/mutation-check.mjs",
+    "coverage": "node node_modules/vitest/vitest.mjs run --coverage --coverage.include=src --coverage.reporter=text"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",
+    "@vitest/coverage-v8": "^5.1.1",
     "typescript": "^7.0.2",
     "vitest": "^5.1.1"
   }
