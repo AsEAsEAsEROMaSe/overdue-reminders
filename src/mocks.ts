@@ -3,6 +3,7 @@
  * @module mocks
  *
  * Головний (хто використовує):
+ * @see {@link ../test/faulty.ts}
  * @see {@link ../test/run.test.ts}
  * @see {@link ../test/mocks.test.ts}
  *

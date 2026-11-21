@@ -12,16 +12,16 @@
 
 import type { TaskRepo, UserRepo, Messenger, SentLog, AttemptLog, Lock } from './ports.ts';
 
-// Усе, що потрібно запуску ззовні
+// Усе, що потрібно запуску ззовні; після створення не міняється
 export interface RunDeps {
-  taskRepo: TaskRepo;
-  userRepo: UserRepo;
-  messenger: Messenger;
-  sentLog: SentLog;
-  attemptLog: AttemptLog;
-  lock: Lock;
+  readonly taskRepo: TaskRepo;
+  readonly userRepo: UserRepo;
+  readonly messenger: Messenger;
+  readonly sentLog: SentLog;
+  readonly attemptLog: AttemptLog;
+  readonly lock: Lock;
   // Скільки чекати відповіді Telegram, мс (наприклад 10000)
-  sendTimeoutMs: number;
+  readonly sendTimeoutMs: number;
 }
 
 // Чим закінчилась обробка одного користувача.

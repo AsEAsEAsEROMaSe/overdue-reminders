@@ -8,6 +8,8 @@
  * @see {@link ../src/mocks.ts}
  * @see {@link ../src/types.ts}
  * @see {@link ./builders.ts}
+ * @see {@link ../src/ports.ts}
+ * @see {@link ./faulty.ts}
  */
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
@@ -15,6 +17,15 @@ import { runDailyReminders } from '../src/run.ts';
 import type { RunDeps } from '../src/run.types.ts';
 import { FakeTaskRepo, FakeUserRepo, FakeMessenger, FakeSentLog, FakeAttemptLog, FakeLock } from '../src/mocks.ts';
 import type { Task, User, RunReport } from '../src/types.ts';
+import type { TaskRepo, UserRepo, Messenger, SentLog } from '../src/ports.ts';
+import {
+  TaskRepoFailingOnce,
+  TaskRepoWithDoneTasks,
+  UserRepoFailingFor,
+  SentLogFailingMarkFor,
+  BrokenMessenger,
+  SlowMessenger,
+} from './faulty.ts';
 import {
   makeTask,
   makeDoneTask,
@@ -55,11 +66,16 @@ function oneOverdueTaskForAnna(): Task[] {
 // Свіжі моки на кожен тест: тести не ділять стан між собою.
 // Месенджер передаємо ззовні, щоб тест міг дивитись, що відправлено
 function makeDeps(tasks: Task[], users: User[], messenger: FakeMessenger): RunDeps {
+  return buildDeps(new FakeTaskRepo(tasks), new FakeUserRepo(users), messenger, new FakeSentLog());
+}
+
+// Те саме, але сховища й месенджер задає сам тест (наприклад, зі збоєм)
+function buildDeps(taskRepo: TaskRepo, userRepo: UserRepo, messenger: Messenger, sentLog: SentLog): RunDeps {
   const deps: RunDeps = {
-    taskRepo: new FakeTaskRepo(tasks),
-    userRepo: new FakeUserRepo(users),
+    taskRepo: taskRepo,
+    userRepo: userRepo,
     messenger: messenger,
-    sentLog: new FakeSentLog(),
+    sentLog: sentLog,
     attemptLog: new FakeAttemptLog(),
     lock: new FakeLock(),
     sendTimeoutMs: SEND_TIMEOUT_MS,
@@ -231,15 +247,9 @@ describe('runDailyReminders: блокування', () => {
 
   it('блокування знімається навіть після помилки, наступний запуск працює', async () => {
     const messenger = new FakeMessenger();
-    const deps = makeDeps(threeOverdueTasks(), USERS, messenger);
-    const realTaskRepo = deps.taskRepo;
-    deps.taskRepo = {
-      async listNotDone() {
-        throw new Error('база недоступна');
-      },
-    };
+    const taskRepo = new TaskRepoFailingOnce(threeOverdueTasks());
+    const deps = buildDeps(taskRepo, new FakeUserRepo(USERS), messenger, new FakeSentLog());
     await expect(runDailyReminders(NOW, deps)).rejects.toThrow('база недоступна');
-    deps.taskRepo = realTaskRepo;
 
     const report = await runDailyReminders(LATER_SAME_DAY, deps);
 
@@ -273,12 +283,8 @@ describe('runDailyReminders: збій одному не зупиняє решт�
   });
 
   it('невідома помилка месенджера записується як error', async () => {
-    const deps = makeDeps(threeOverdueTasks(), USERS, new FakeMessenger());
-    deps.messenger = {
-      async send() {
-        throw new Error('мережа впала');
-      },
-    };
+    const taskRepo = new FakeTaskRepo(threeOverdueTasks());
+    const deps = buildDeps(taskRepo, new FakeUserRepo(USERS), new BrokenMessenger(), new FakeSentLog());
 
     const report = await runDailyReminders(NOW, deps);
 
@@ -292,16 +298,8 @@ describe('runDailyReminders: збій одному не зупиняє решт�
 
   it('помилка UserRepo для одного користувача не зупиняє решту', async () => {
     const messenger = new FakeMessenger();
-    const deps = makeDeps(threeOverdueTasks(), USERS, messenger);
-    const realUserRepo = deps.userRepo;
-    deps.userRepo = {
-      async get(id: string) {
-        if (id === 'bohdan') {
-          throw new Error('база недоступна');
-        }
-        return realUserRepo.get(id);
-      },
-    };
+    const userRepo = new UserRepoFailingFor(USERS, 'bohdan');
+    const deps = buildDeps(new FakeTaskRepo(threeOverdueTasks()), userRepo, messenger, new FakeSentLog());
 
     const report = await runDailyReminders(NOW, deps);
 
@@ -311,19 +309,8 @@ describe('runDailyReminders: збій одному не зупиняє решт�
 
   it('помилка SentLog.mark для одного користувача не зупиняє решту', async () => {
     const messenger = new FakeMessenger();
-    const deps = makeDeps(threeOverdueTasks(), USERS, messenger);
-    const realSentLog = deps.sentLog;
-    deps.sentLog = {
-      async has(userId: string, day: string) {
-        return realSentLog.has(userId, day);
-      },
-      async mark(userId: string, day: string) {
-        if (userId === 'anna') {
-          throw new Error('журнал недоступний');
-        }
-        return realSentLog.mark(userId, day);
-      },
-    };
+    const sentLog = new SentLogFailingMarkFor('anna');
+    const deps = buildDeps(new FakeTaskRepo(threeOverdueTasks()), new FakeUserRepo(USERS), messenger, sentLog);
 
     const report = await runDailyReminders(NOW, deps);
 
@@ -352,14 +339,8 @@ describe('runDailyReminders: таймаут відправки', () => {
 
   it('відповідь за мілісекунду до таймауту вважається успіхом', async () => {
     vi.useFakeTimers();
-    const deps = makeDeps(oneOverdueTaskForAnna(), USERS, new FakeMessenger());
-    deps.messenger = {
-      async send() {
-        await new Promise<void>((resolve) => {
-          setTimeout(resolve, SEND_TIMEOUT_MS - 1);
-        });
-      },
-    };
+    const messenger = new SlowMessenger(SEND_TIMEOUT_MS - 1);
+    const deps = buildDeps(new FakeTaskRepo(oneOverdueTaskForAnna()), new FakeUserRepo(USERS), messenger, new FakeSentLog());
 
     const report = await runWithFakeTimers(NOW, deps);
 
@@ -574,13 +555,9 @@ describe('runDailyReminders: погані дані', () => {
 
   it('задача done не надсилається, навіть якщо сховище її повернуло', async () => {
     const messenger = new FakeMessenger();
-    const deps = makeDeps([], USERS, messenger);
     // Сховище з помилкою: віддає і виконані задачі
-    deps.taskRepo = {
-      async listNotDone() {
-        return [makeDoneTask('t1', 'anna', 'Вже зроблено', '2026-03-01T10:00:00Z')];
-      },
-    };
+    const taskRepo = new TaskRepoWithDoneTasks([makeDoneTask('t1', 'anna', 'Вже зроблено', '2026-03-01T10:00:00Z')]);
+    const deps = buildDeps(taskRepo, new FakeUserRepo(USERS), messenger, new FakeSentLog());
 
     const report = await runDailyReminders(NOW, deps);
 

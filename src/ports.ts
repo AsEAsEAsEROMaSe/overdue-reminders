@@ -3,6 +3,8 @@
  * @module ports
  *
  * Головний (хто використовує):
+ * @see {@link ../test/run.test.ts}
+ * @see {@link ../test/faulty.ts}
  * @see {@link ./run.ts}
  * @see {@link ./run.types.ts}
  * @see {@link ./mocks.ts}

@@ -3,6 +3,7 @@
  * @module types
  *
  * Головний (хто використовує):
+ * @see {@link ../test/faulty.ts}
  * @see {@link ./ports.ts}
  * @see {@link ./overdue.ts}
  * @see {@link ./overdue.types.ts}
