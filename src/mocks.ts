@@ -1,5 +1,5 @@
 /**
- * @file Реалізації портів у пам'яті для тестів; мок месенджера вміє падати.
+ * @file Реалізації портів у пам'яті для тестів; підроблений месенджер вміє падати.
  * @module mocks
  *
  * Головний (хто використовує):
@@ -14,31 +14,44 @@ import type { TaskRepo, UserRepo, Messenger, SentLog, AttemptLog, Lock } from '.
 import { TelegramError } from './types.ts';
 import type { Task, User } from './types.ts';
 
-export function createTaskRepo(tasks: Task[]): TaskRepo {
-  return {
-    async listNotDone() {
-      const result: Task[] = [];
-      for (const task of tasks) {
-        if (task.status !== 'done') {
-          result.push(task);
-        }
-      }
-      return result;
-    },
-  };
+// Ключ запису для журналів: користувач і день разом
+function makeKey(userId: string, day: string): string {
+  return userId + '|' + day;
 }
 
-export function createUserRepo(users: User[]): UserRepo {
-  return {
-    async get(id: string) {
-      for (const user of users) {
-        if (user.id === id) {
-          return user;
-        }
+export class FakeTaskRepo implements TaskRepo {
+  tasks: Task[];
+
+  constructor(tasks: Task[]) {
+    this.tasks = tasks;
+  }
+
+  async listNotDone(): Promise<Task[]> {
+    const result: Task[] = [];
+    for (const task of this.tasks) {
+      if (task.status !== 'done') {
+        result.push(task);
       }
-      return undefined;
-    },
-  };
+    }
+    return result;
+  }
+}
+
+export class FakeUserRepo implements UserRepo {
+  users: User[];
+
+  constructor(users: User[]) {
+    this.users = users;
+  }
+
+  async get(id: string): Promise<User | undefined> {
+    for (const user of this.users) {
+      if (user.id === id) {
+        return user;
+      }
+    }
+    return undefined;
+  }
 }
 
 // Як має впасти відправка на заданий chatId
@@ -49,97 +62,118 @@ export interface SentMessage {
   text: string;
 }
 
-export interface MessengerMock extends Messenger {
-  // Успішно доставлені повідомлення
-  sent: SentMessage[];
-  // Усі спроби відправки, і вдалі, і ні (chatId)
-  attempts: string[];
-  failFor(chatId: string, kind: FailureKind): void;
-  clearFailure(chatId: string): void;
+interface Failure {
+  chatId: string;
+  kind: FailureKind;
 }
 
-export function createMessenger(): MessengerMock {
-  const failures = new Map<string, FailureKind>();
-  const mock: MessengerMock = {
-    sent: [],
-    attempts: [],
-    failFor(chatId: string, kind: FailureKind) {
-      failures.set(chatId, kind);
-    },
-    clearFailure(chatId: string) {
-      failures.delete(chatId);
-    },
-    async send(chatId: string, text: string) {
-      mock.attempts.push(chatId);
-      const kind = failures.get(chatId);
-      if (kind === 'rate_limited') {
+export class FakeMessenger implements Messenger {
+  // Успішно доставлені повідомлення
+  sent: SentMessage[] = [];
+  // Усі спроби відправки, і вдалі, і ні (chatId)
+  attempts: string[] = [];
+  // Для яких chatId відправка має впасти
+  failures: Failure[] = [];
+
+  failFor(chatId: string, kind: FailureKind): void {
+    this.failures.push({ chatId: chatId, kind: kind });
+  }
+
+  clearFailure(chatId: string): void {
+    const left: Failure[] = [];
+    for (const failure of this.failures) {
+      if (failure.chatId !== chatId) {
+        left.push(failure);
+      }
+    }
+    this.failures = left;
+  }
+
+  async send(chatId: string, text: string): Promise<void> {
+    this.attempts.push(chatId);
+
+    for (const failure of this.failures) {
+      if (failure.chatId !== chatId) {
+        continue;
+      }
+      if (failure.kind === 'rate_limited') {
         throw new TelegramError(429);
       }
-      if (kind === 'blocked') {
+      if (failure.kind === 'blocked') {
         throw new TelegramError(403);
       }
-      if (kind === 'hang') {
-        // Відповідь ніколи не приходить: перевіряє таймаут
-        await new Promise<void>(() => {});
+      if (failure.kind === 'hang') {
+        // Відповідь ніколи не приходить: так перевіряємо таймаут
+        await new Promise<void>(function () {});
       }
-      mock.sent.push({ chatId: chatId, text: text });
-    },
-  };
-  return mock;
+    }
+
+    this.sent.push({ chatId: chatId, text: text });
+  }
 }
 
-export function createSentLog(): SentLog {
-  const marks = new Set<string>();
-  return {
-    async has(userId: string, day: string) {
-      return marks.has(userId + '|' + day);
-    },
-    async mark(userId: string, day: string) {
-      marks.add(userId + '|' + day);
-    },
-  };
+export class FakeSentLog implements SentLog {
+  // Ключі «користувач|день», кому вже надіслано
+  marks: string[] = [];
+
+  async has(userId: string, day: string): Promise<boolean> {
+    return this.marks.includes(makeKey(userId, day));
+  }
+
+  async mark(userId: string, day: string): Promise<void> {
+    this.marks.push(makeKey(userId, day));
+  }
 }
 
-export function createAttemptLog(): AttemptLog {
-  const counts = new Map<string, number>();
-  const stopped = new Set<string>();
-  return {
-    async count(userId: string, day: string) {
-      const value = counts.get(userId + '|' + day);
-      if (value === undefined) {
-        return 0;
+export class FakeAttemptLog implements AttemptLog {
+  // Один запис «користувач|день» на кожну спробу
+  attempts: string[] = [];
+  // Ключі «користувач|день», кому сьогодні більше не пробуємо
+  stopped: string[] = [];
+
+  async count(userId: string, day: string): Promise<number> {
+    const key = makeKey(userId, day);
+    let total = 0;
+    for (const attempt of this.attempts) {
+      if (attempt === key) {
+        total = total + 1;
       }
-      return value;
-    },
-    async add(userId: string, day: string) {
-      const key = userId + '|' + day;
-      let value = counts.get(key);
-      if (value === undefined) {
-        value = 0;
-      }
-      counts.set(key, value + 1);
-    },
-    async stop(userId: string, day: string) {
-      stopped.add(userId + '|' + day);
-    },
-    async isStopped(userId: string, day: string) {
-      return stopped.has(userId + '|' + day);
-    },
-  };
+    }
+    return total;
+  }
+
+  async add(userId: string, day: string): Promise<void> {
+    this.attempts.push(makeKey(userId, day));
+  }
+
+  async stop(userId: string, day: string): Promise<void> {
+    this.stopped.push(makeKey(userId, day));
+  }
+
+  async isStopped(userId: string, day: string): Promise<boolean> {
+    return this.stopped.includes(makeKey(userId, day));
+  }
 }
 
-export function createLock(): Lock {
-  const taken = new Set<string>();
-  return {
-    async acquire(key: string) {
-      if (taken.has(key)) {
-        return false;
+export class FakeLock implements Lock {
+  // Зайняті ключі
+  taken: string[] = [];
+
+  async acquire(key: string): Promise<boolean> {
+    if (this.taken.includes(key)) {
+      return false;
+    }
+    this.taken.push(key);
+    return true;
+  }
+
+  async release(key: string): Promise<void> {
+    const left: string[] = [];
+    for (const takenKey of this.taken) {
+      if (takenKey !== key) {
+        left.push(takenKey);
       }
-      taken.add(key);
-      return true;
-    },
-    async release(key: string) {
-      taken.delete(key);
-    },
-  };
+    }
+    this.taken = left;
+  }
 }
