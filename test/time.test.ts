@@ -48,6 +48,37 @@ describe('kyivDay', () => {
 
     expect(result).toBe('2026-01-01');
   });
+
+  it('за мілісекунду до нового року за Києвом ще старий рік', () => {
+    const result = kyivDay(new Date('2025-12-31T21:59:59.999Z'));
+
+    expect(result).toBe('2025-12-31');
+  });
+
+  it('29 лютого високосного 2028 року', () => {
+    const result = kyivDay(new Date('2028-02-28T22:00:00Z'));
+
+    expect(result).toBe('2028-02-29');
+  });
+
+  it('невалідна дата кидає RangeError', () => {
+    expect(() => kyivDay(new Date('не дата'))).toThrow(RangeError);
+  });
+});
+
+describe('kyivDay: кожна частина дати окремо', () => {
+  it('рік, місяць і день беруться з київської дати, а не з UTC', () => {
+    // 22:30 UTC 31 грудня 2026 це вже 1 січня 2027 за Києвом: змінюються всі три частини
+    const result = kyivDay(new Date('2026-12-31T22:30:00Z'));
+
+    expect(result).toBe('2027-01-01');
+  });
+
+  it('кінець місяця: 30 квітня переходить у 1 травня', () => {
+    const result = kyivDay(new Date('2026-04-30T21:00:00Z'));
+
+    expect(result).toBe('2026-05-01');
+  });
 });
 
 describe('startOfKyivDay', () => {
@@ -96,6 +127,38 @@ describe('startOfKyivDay', () => {
   });
 });
 
+describe('startOfKyivDay: межі місяця і року', () => {
+  it('1 січня: місяць рахується з нуля правильно', () => {
+    const result = startOfKyivDay(new Date('2026-01-01T10:00:00Z'));
+
+    expect(result.toISOString()).toBe('2025-12-31T22:00:00.000Z');
+  });
+
+  it('31 грудня: остання доба року', () => {
+    const result = startOfKyivDay(new Date('2026-12-31T10:00:00Z'));
+
+    expect(result.toISOString()).toBe('2026-12-30T22:00:00.000Z');
+  });
+
+  it('29 лютого високосного року', () => {
+    const result = startOfKyivDay(new Date('2028-02-29T10:00:00Z'));
+
+    expect(result.toISOString()).toBe('2028-02-28T22:00:00.000Z');
+  });
+
+  it('о 23:59 за Києвом початок доби той самий, що й о 00:01', () => {
+    const early = startOfKyivDay(new Date('2026-07-14T21:01:00Z'));
+    const late = startOfKyivDay(new Date('2026-07-15T20:59:00Z'));
+
+    expect(early.toISOString()).toBe('2026-07-14T21:00:00.000Z');
+    expect(late.toISOString()).toBe('2026-07-14T21:00:00.000Z');
+  });
+
+  it('невалідна дата кидає RangeError', () => {
+    expect(() => startOfKyivDay(new Date('не дата'))).toThrow(RangeError);
+  });
+});
+
 describe('isReminderTime (тест брифу 2)', () => {
   it('січень: 08:00 UTC це 10:00 за Києвом', () => {
     expect(isReminderTime(new Date('2026-01-15T08:00:00Z'))).toBe(true);
@@ -130,6 +193,34 @@ describe('isReminderTime (тест брифу 2)', () => {
     expect(isReminderTime(new Date('2026-03-29T08:00:00Z'))).toBe(false);
   });
 
+  it('рівно 10:00:00.000 за Києвом уже час', () => {
+    expect(isReminderTime(new Date('2026-01-15T08:00:00.000Z'))).toBe(true);
+  });
+
+  it('за мілісекунду до 10:00 за Києвом ще не час', () => {
+    expect(isReminderTime(new Date('2026-01-15T07:59:59.999Z'))).toBe(false);
+  });
+
+  it('10:59:59.999 за Києвом ще час', () => {
+    expect(isReminderTime(new Date('2026-01-15T08:59:59.999Z'))).toBe(true);
+  });
+
+  it('22:00 за Києвом не час: година рахується від 00 до 23, а не по 12', () => {
+    expect(isReminderTime(new Date('2026-01-15T20:00:00Z'))).toBe(false);
+  });
+
+  it('00:00 за Києвом не час', () => {
+    expect(isReminderTime(new Date('2026-01-14T22:00:00Z'))).toBe(false);
+  });
+
+  it('10:00 за UTC (12:00 за Києвом) не час', () => {
+    expect(isReminderTime(new Date('2026-01-15T10:00:00Z'))).toBe(false);
+  });
+
+  it('невалідна дата кидає RangeError', () => {
+    expect(() => isReminderTime(new Date('не дата'))).toThrow(RangeError);
+  });
+
   it('у день переходу на зимовий час 10:00 за Києвом це 08:00 UTC', () => {
     expect(isReminderTime(new Date('2026-10-25T08:00:00Z'))).toBe(true);
     expect(isReminderTime(new Date('2026-10-25T07:00:00Z'))).toBe(false);
@@ -155,5 +246,21 @@ describe('formatKyivDate', () => {
 
   it('секунди не показуються і не округлюються', () => {
     expect(formatKyivDate(new Date('2026-01-15T08:59:59Z'))).toBe('15.01.2026 10:59');
+  });
+
+  it('рік показується повністю: перехід у 2027 рік', () => {
+    expect(formatKyivDate(new Date('2026-12-31T22:30:00Z'))).toBe('01.01.2027 00:30');
+  });
+
+  it('23:59 показується як 23:59, а не 11:59', () => {
+    expect(formatKyivDate(new Date('2026-01-15T21:59:00Z'))).toBe('15.01.2026 23:59');
+  });
+
+  it('кожна частина на своєму місці: день 31, місяць 12', () => {
+    expect(formatKyivDate(new Date('2026-12-31T08:05:00Z'))).toBe('31.12.2026 10:05');
+  });
+
+  it('невалідна дата кидає RangeError', () => {
+    expect(() => formatKyivDate(new Date('не дата'))).toThrow(RangeError);
   });
 });

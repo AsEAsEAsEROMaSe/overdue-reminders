@@ -59,16 +59,14 @@ export function kyivDay(date: Date): string {
   return parts.year + '-' + parts.month + '-' + parts.day;
 }
 
-// Чи показує київський годинник рівно 00:00
+// Чи показує київський годинник 00 годин.
+// Хвилини не перевіряємо: Київ зсунутий від UTC лише на цілі години
 function isKyivMidnight(date: Date): boolean {
   const parts = getKyivParts(date);
-  if (parts.hour !== '00') {
-    return false;
+  if (parts.hour === '00') {
+    return true;
   }
-  if (parts.minute !== '00') {
-    return false;
-  }
-  return true;
+  return false;
 }
 
 // Момент 00:00 за Києвом тієї доби, у якій лежить date.

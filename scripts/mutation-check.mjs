@@ -37,6 +37,30 @@ const MUTATIONS = [
     to: "return parts.month + '.' + parts.day",
   },
   {
+    name: 'місяць у Date.UTC без поправки на нуль',
+    file: 'src/time.ts',
+    from: 'Date.UTC(year, month - 1, day)',
+    to: 'Date.UTC(year, month, day)',
+  },
+  {
+    name: 'доба у форматі РРРР-ДД-ММ',
+    file: 'src/time.ts',
+    from: "return parts.year + '-' + parts.month + '-' + parts.day;",
+    to: "return parts.year + '-' + parts.day + '-' + parts.month;",
+  },
+  {
+    name: 'хвилини завжди 00',
+    file: 'src/time.ts',
+    from: 'result.minute = part.value;',
+    to: "result.minute = '00';",
+  },
+  {
+    name: 'рік завжди 2026',
+    file: 'src/time.ts',
+    from: 'result.year = part.value;',
+    to: "result.year = '2026';",
+  },
+  {
     name: 'немає перевірки статусу done',
     file: 'src/overdue.ts',
     from: "    if (task.status === 'done') {\n      continue;\n    }\n",
