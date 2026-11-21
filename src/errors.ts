@@ -5,6 +5,7 @@
  * Головний (хто використовує):
  * @see {@link ./run.ts}
  * @see {@link ./mocks.ts}
+ * @see {@link ../test/faulty.ts}
  */
 
 // Помилка відправки з кодом Telegram (429, 403 тощо)
