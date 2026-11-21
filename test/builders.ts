@@ -58,6 +58,36 @@ export function makeTaskWithoutAssignee(id: string, deadlineIso: string): Task {
   return oldRecord as unknown as Task;
 }
 
+// Запис з бази, де deadline = null
+export function makeTaskWithNullDeadline(id: string, assigneeId: string): Task {
+  const oldRecord = { id: id, assigneeId: assigneeId, title: 'Дедлайн null', deadline: null, status: 'open' };
+  return oldRecord as unknown as Task;
+}
+
+// Запис з бази, де deadline рядком, а не Date
+export function makeTaskWithStringDeadline(id: string, assigneeId: string, deadlineIso: string): Task {
+  const oldRecord = { id: id, assigneeId: assigneeId, title: 'Дедлайн рядком', deadline: deadlineIso, status: 'open' };
+  return oldRecord as unknown as Task;
+}
+
+// Запис з бази, де assigneeId = null
+export function makeTaskWithNullAssignee(id: string, deadlineIso: string): Task {
+  const oldRecord = { id: id, assigneeId: null, title: 'Виконавець null', deadline: new Date(deadlineIso), status: 'open' };
+  return oldRecord as unknown as Task;
+}
+
+// Запис з бази без дедлайну і без виконавця
+export function makeTaskWithoutDeadlineAndAssignee(id: string): Task {
+  const oldRecord = { id: id, title: 'Зовсім порожня', status: 'open' };
+  return oldRecord as unknown as Task;
+}
+
+// Виконаний запис з бази без виконавця
+export function makeDoneTaskWithoutAssignee(id: string, deadlineIso: string): Task {
+  const oldRecord = { id: id, title: 'Нічия зроблена', deadline: new Date(deadlineIso), status: 'done' };
+  return oldRecord as unknown as Task;
+}
+
 // Вигадані chat_id для тестів, не справжні
 export function makeUser(id: string): User {
   const user: User = { id: id, telegramChatId: 'chat-' + id };

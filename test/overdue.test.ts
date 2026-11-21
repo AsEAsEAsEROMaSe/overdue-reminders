@@ -16,6 +16,11 @@ import {
   makeTaskWithoutDeadline,
   makeDoneTaskWithoutDeadline,
   makeTaskWithoutAssignee,
+  makeTaskWithNullDeadline,
+  makeTaskWithStringDeadline,
+  makeTaskWithNullAssignee,
+  makeTaskWithoutDeadlineAndAssignee,
+  makeDoneTaskWithoutAssignee,
   freezeTasks,
 } from './builders.ts';
 
@@ -156,6 +161,109 @@ describe('groupOverdueByUser: погані дані (тест брифу 8, ча
 
     expect(result.groups).toEqual([]);
     expect(result.skipped).toEqual([{ kind: 'task', id: 't1', reason: 'no_assignee' }]);
+  });
+});
+
+describe('groupOverdueByUser: кожне поле задачі', () => {
+  it('deadline = null дає no_deadline', () => {
+    const task = makeTaskWithNullDeadline('t1', 'u1');
+
+    const result = groupOverdueByUser([task], NOW);
+
+    expect(result).toEqual({ groups: [], skipped: [{ kind: 'task', id: 't1', reason: 'no_deadline' }] });
+  });
+
+  it('deadline рядком, а не Date, дає no_deadline', () => {
+    const task = makeTaskWithStringDeadline('t1', 'u1', '2026-03-01T10:00:00Z');
+
+    const result = groupOverdueByUser([task], NOW);
+
+    expect(result).toEqual({ groups: [], skipped: [{ kind: 'task', id: 't1', reason: 'no_deadline' }] });
+  });
+
+  it('assigneeId = null дає no_assignee', () => {
+    const task = makeTaskWithNullAssignee('t1', '2026-03-01T10:00:00Z');
+
+    const result = groupOverdueByUser([task], NOW);
+
+    expect(result).toEqual({ groups: [], skipped: [{ kind: 'task', id: 't1', reason: 'no_assignee' }] });
+  });
+
+  it('без дедлайну і без виконавця: одна причина no_deadline, бо дедлайн перевіряється першим', () => {
+    const task = makeTaskWithoutDeadlineAndAssignee('t1');
+
+    const result = groupOverdueByUser([task], NOW);
+
+    expect(result.skipped).toEqual([{ kind: 'task', id: 't1', reason: 'no_deadline' }]);
+  });
+
+  it('без виконавця, але з майбутнім дедлайном: теж no_assignee, погані дані звітуємо завжди', () => {
+    const task = makeTaskWithoutAssignee('t1', '2026-03-20T10:00:00Z');
+
+    const result = groupOverdueByUser([task], NOW);
+
+    expect(result.skipped).toEqual([{ kind: 'task', id: 't1', reason: 'no_assignee' }]);
+  });
+
+  it('виконана задача без виконавця ігнорується, у skipped не йде', () => {
+    const task = makeDoneTaskWithoutAssignee('t1', '2026-03-01T10:00:00Z');
+
+    const result = groupOverdueByUser([task], NOW);
+
+    expect(result).toEqual({ groups: [], skipped: [] });
+  });
+
+  it('виконана задача з невалідною датою ігнорується', () => {
+    const task = makeDoneTask('t1', 'u1', 'Зроблена', 'не дата');
+
+    const result = groupOverdueByUser([task], NOW);
+
+    expect(result).toEqual({ groups: [], skipped: [] });
+  });
+
+  it('у skipped id кожної задачі свій, у порядку появи', () => {
+    const first = makeTaskWithoutDeadline('перша', 'u1');
+    const second = makeTaskWithoutAssignee('друга', '2026-03-01T10:00:00Z');
+    const third = makeTaskWithNullDeadline('третя', 'u2');
+
+    const result = groupOverdueByUser([first, second, third], NOW);
+
+    expect(result.skipped).toEqual([
+      { kind: 'task', id: 'перша', reason: 'no_deadline' },
+      { kind: 'task', id: 'друга', reason: 'no_assignee' },
+      { kind: 'task', id: 'третя', reason: 'no_deadline' },
+    ]);
+  });
+
+  it('у групі задачі в порядку з вхідного списку, не відсортовані', () => {
+    const later = makeTask('t1', 'u1', 'Пізніша', '2026-03-08T10:00:00Z');
+    const earlier = makeTask('t2', 'u1', 'Раніша', '2026-03-01T10:00:00Z');
+
+    const result = groupOverdueByUser([later, earlier], NOW);
+
+    expect(result.groups).toEqual([{ userId: 'u1', tasks: [later, earlier] }]);
+  });
+});
+
+describe('groupOverdueByUser: параметр now', () => {
+  it('та сама задача: напередодні ще не прострочена, наступного дня вже прострочена', () => {
+    // Дедлайн 12:00 9 березня за Києвом
+    const task = makeTask('t1', 'u1', 'Задача', '2026-03-09T10:00:00Z');
+
+    const sameDay = groupOverdueByUser([task], new Date('2026-03-09T13:00:00Z'));
+    const nextDay = groupOverdueByUser([task], NOW);
+
+    expect(sameDay.groups).toEqual([]);
+    expect(nextDay.groups).toEqual([{ userId: 'u1', tasks: [task] }]);
+  });
+
+  it('межа рахується від доби now за Києвом, а не за UTC', () => {
+    // now: 23:30 UTC 9 березня = 01:30 10 березня за Києвом; дедлайн 23:00 9 березня за Києвом
+    const task = makeTask('t1', 'u1', 'Задача', '2026-03-09T21:00:00Z');
+
+    const result = groupOverdueByUser([task], new Date('2026-03-09T23:30:00Z'));
+
+    expect(result.groups).toEqual([{ userId: 'u1', tasks: [task] }]);
   });
 });
 

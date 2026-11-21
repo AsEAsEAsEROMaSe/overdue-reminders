@@ -77,4 +77,54 @@ describe('buildReminderText', () => {
 
     expect(text).toBe('Прострочені задачі: 2\n1. А (дедлайн 28.02.2026 00:00)\n2. Б (дедлайн 05.03.2026 11:15)');
   });
+
+  it('порожній список: лише заголовок з нулем', () => {
+    const text = buildReminderText([]);
+
+    expect(text).toBe('Прострочені задачі: 0');
+  });
+
+  it('назва вставляється як є: лапки, апостроф, емодзі', () => {
+    const task = makeTask('t1', 'u1', 'Договір «Ромашка» з ТОВ \'Сонце\' 📄', '2026-03-05T10:00:00Z');
+
+    const text = buildReminderText([task]);
+
+    expect(text).toBe('Прострочені задачі: 1\n1. Договір «Ромашка» з ТОВ \'Сонце\' 📄 (дедлайн 05.03.2026 12:00)');
+  });
+
+  it('порожня назва не ламає текст', () => {
+    const task = makeTask('t1', 'u1', '', '2026-03-05T10:00:00Z');
+
+    const text = buildReminderText([task]);
+
+    expect(text).toBe('Прострочені задачі: 1\n1.  (дедлайн 05.03.2026 12:00)');
+  });
+
+  it('десять задач: нумерація від 1 до 10 без нулів попереду', () => {
+    const tasks = [];
+    for (let day = 1; day <= 10; day = day + 1) {
+      let dayText = String(day);
+      if (day < 10) {
+        dayText = '0' + dayText;
+      }
+      tasks.push(makeTask('t' + day, 'u1', 'Задача ' + day, '2026-03-' + dayText + 'T10:00:00Z'));
+    }
+
+    const text = buildReminderText(tasks);
+
+    const lines = text.split('\n');
+    expect(lines.length).toBe(11);
+    expect(lines[0]).toBe('Прострочені задачі: 10');
+    expect(lines[1]).toBe('1. Задача 1 (дедлайн 01.03.2026 12:00)');
+    expect(lines[9]).toBe('9. Задача 9 (дедлайн 09.03.2026 12:00)');
+    expect(lines[10]).toBe('10. Задача 10 (дедлайн 10.03.2026 12:00)');
+  });
+
+  it('літній дедлайн показується за літнім часом', () => {
+    const task = makeTask('t1', 'u1', 'Літня', '2026-07-01T09:00:00Z');
+
+    const text = buildReminderText([task]);
+
+    expect(text).toBe('Прострочені задачі: 1\n1. Літня (дедлайн 01.07.2026 12:00)');
+  });
 });

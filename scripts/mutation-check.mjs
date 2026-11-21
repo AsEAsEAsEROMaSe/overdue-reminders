@@ -79,6 +79,24 @@ const MUTATIONS = [
     to: '    if (false) {',
   },
   {
+    name: 'виконавця перевіряємо раніше за дедлайн',
+    file: 'src/overdue.ts',
+    from: "    if (!hasValidDeadline(task)) {\n      skipped.push({ kind: 'task', id: task.id, reason: 'no_deadline' });\n      continue;\n    }\n    if (!task.assigneeId) {\n      skipped.push({ kind: 'task', id: task.id, reason: 'no_assignee' });\n      continue;\n    }\n",
+    to: "    if (!task.assigneeId) {\n      skipped.push({ kind: 'task', id: task.id, reason: 'no_assignee' });\n      continue;\n    }\n    if (!hasValidDeadline(task)) {\n      skipped.push({ kind: 'task', id: task.id, reason: 'no_deadline' });\n      continue;\n    }\n",
+  },
+  {
+    name: 'дедлайн рядком теж приймаємо',
+    file: 'src/overdue.ts',
+    from: '  if (isDate === false) {',
+    to: '  if (false) {',
+  },
+  {
+    name: 'нумерація з нуля',
+    file: 'src/format.ts',
+    from: '  let number = 1;',
+    to: '  let number = 0;',
+  },
+  {
     name: 'немає перевірки виконавця',
     file: 'src/overdue.ts',
     from: '    if (!task.assigneeId) {',
