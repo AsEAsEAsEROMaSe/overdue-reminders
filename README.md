@@ -18,7 +18,7 @@ npm install --no-bin-links
 npm test                # vitest run
 npm run typecheck       # tsc --noEmit
 npm run check:headers   # звірка JSDoc-шапок з import
-npm run check:mutations # 22 навмисні помилки в коді, кожну має зловити хоч один тест
+npm run check:mutations # 25 навмисних помилок у коді, кожну має зловити хоч один тест
 ```
 
 На диску проєкту не працюють символьні посилання. Через це `npm install` без `--no-bin-links` падає з EPERM, а `npx vitest` і `npx tsc` не знаходять бінарників.
@@ -43,7 +43,7 @@ npm run check:mutations # 22 навмисні помилки в коді, кож
 
 Для тестів:
 
-- `src/mocks.ts`: порти в пам'яті; месенджер падає для заданого chatId з 429, 403 або зависає
+- `src/mocks.ts`: класи `FakeTaskRepo`, `FakeUserRepo`, `FakeMessenger`, `FakeSentLog`, `FakeAttemptLog`, `FakeLock`; дані в звичайних масивах; `FakeMessenger` падає для заданого chatId з 429, 403 або зависає
   - `src/ports.ts`
   - `src/types.ts`
 - `test/builders.ts`: будівники тестових даних, зокрема «старі» записи без полів
@@ -58,7 +58,7 @@ npm run check:mutations # 22 навмисні помилки в коді, кож
 - Перевіряються реальні значення строгою рівністю: кому і який текст пішов, повний звіт.
 - Таймаут перевіряється на підробленому годиннику vitest, без справжнього очікування.
 - Час завжди прибитий: `now` передається параметром.
-- `npm run check:mutations` по черзі ламає код у 22 місцях і перевіряє, що тести це помічають.
+- `npm run check:mutations` по черзі ламає код у 25 місцях і перевіряє, що тести це помічають.
 
 ## Як працює запуск
 
@@ -70,6 +70,9 @@ npm run check:mutations # 22 навмисні помилки в коді, кож
    - сьогодні вже вирішено не пробувати (`AttemptLog.isStopped`): `failed` з `attempts_exhausted`, без відправки;
    - інакше спроба: лічильник плюс один, відправка з таймаутом.
 4. Успіх: `SentLog.mark` і `sent`. Збій: `failed` з причиною, `mark` не ставиться, решта отримують своє.
+
+У коді це дві функції. `runDailyReminders` бере блокування і йде циклом по виконавцях. `remindUser` обробляє одного виконавця і повертає результат (`sent`, `already_sent`, `skipped` або `failed`), а цикл записує його у звіт.
+Таймаут: `sendWithTimeout` ставить таймер; хто перший, відповідь Telegram чи таймер, той і вирішує результат, а відповідь прибирає таймер.
 
 Причини у `failed`:
 

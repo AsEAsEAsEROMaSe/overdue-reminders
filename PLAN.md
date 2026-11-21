@@ -76,3 +76,28 @@ VS Code тут flatpak, тому nvm ліг у `~/.var/app/com.visualstudio.code
 
 Очікувані значення наявних тестів не змінюю заради зеленого. Якщо тест перевіряв внутрішню деталь (лічильник = 3), переписую його на поведінку і пишу про це в журнал.
 Журнал: `docs/2026-11-21/simplify-log.md`.
+
+# Етап 3: ще простіше, без заплутування (21.11.2026)
+
+Відгук замовника: код усе ще зависокорівневий, треба джуновіший.
+Стан: план підтверджено 21.11.2026, усі кроки виконано (коміти 43280f2…5c5505b і документація).
+
+## Що заплутує зараз
+1. `run.ts`: чотири рівні функцій (`runDailyReminders` → `sendReminders` → `remindUser` → `recordFailure`), звіт передається вниз і там змінюється, `recordFailure` має шість параметрів, два вкладені `try/catch`.
+2. `run.ts`: таймаут через `Promise.race`, `let timer: NodeJS.Timeout | undefined`, порожній клас `SendTimeoutError`.
+3. `mocks.ts`: замикання, що повертають об'єкти з `async`-методами, `Map`/`Set`, об'єкт, що посилається сам на себе (`mock.sent`), окремий інтерфейс `MessengerMock`.
+4. `time.ts`: `Record<string, string>` і цикл по `formatToParts`, масив `[2, 3]` для зсувів.
+5. `overdue.ts`: пошук групи вкладеним циклом посеред основного циклу, `!(x instanceof Date)`.
+
+## Кроки
+| # | Що | Тип |
+|---|---|---|
+| 1 | `mocks.ts`: звичайні класи `FakeTaskRepo`, `FakeUserRepo`, `FakeMessenger`, `FakeSentLog`, `FakeAttemptLog`, `FakeLock` з `implements`, поля-масиви замість `Map`/`Set`; тести створюють їх через `new` | refactor, очікування ті самі |
+| 2 | `time.ts`: частини дати витягуються явними `if (part.type === 'year')` у змінні; `startOfKyivDay` перевіряє спершу UTC+2, потім UTC+3 двома окремими `if` через допоміжну `isKyivMidnight` | refactor |
+| 3 | `overdue.ts`: пошук групи в окремій функції `findGroup(groups, userId)`; перевірка дати без `!( ... instanceof ...)` | refactor |
+| 4 | `run.ts`: дві функції замість чотирьох. `runDailyReminders` (блокування і цикл) і `remindUser`, яка повертає результат одного користувача (`{ status: 'sent' }`, `{ status: 'skipped', ... }`, `{ status: 'failed', ... }`), а цикл сам кладе його у звіт. Без передачі звіту вниз, без функції з шістьма параметрами | refactor |
+| 5 | `run.ts`: таймаут простим `new Promise`: `setTimeout` кидає помилку, відповідь Telegram прибирає таймер; без `Promise.race` і без змінної таймера, що може бути порожньою. Клас `SendTimeoutError` лишається, але з конструктором і текстом помилки, як `TelegramError` | refactor |
+| 6 | Тести: прибрати деструктуризацію `const { deps, messenger } = setup(...)`, писати прямо; мутації оновити під новий текст коду; шапки JSDoc | test |
+
+Після кожного кроку: `npm test`, `npm run typecheck`, `npm run check:headers`, `npm run check:mutations`. Очікувані значення тестів не змінюю.
+Журнал: `docs/2026-11-21/simplify-log.md`, розділ «Етап 3».
