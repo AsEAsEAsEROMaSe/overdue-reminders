@@ -79,6 +79,18 @@ const MUTATIONS = [
     to: '',
   },
   {
+    name: 'сховище задач без копії вхідного масиву',
+    file: 'src/mocks.ts',
+    from: 'this.tasks = tasks.slice();',
+    to: 'this.tasks = tasks;',
+  },
+  {
+    name: 'сховище користувачів без копії вхідного масиву',
+    file: 'src/mocks.ts',
+    from: 'this.users = users.slice();',
+    to: 'this.users = users;',
+  },
+  {
     name: 'немає Lock',
     file: 'src/run.ts',
     from: '  if (!acquired) {',

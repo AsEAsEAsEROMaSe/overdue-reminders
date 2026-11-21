@@ -6,6 +6,7 @@
  * @see {@link ./overdue.test.ts}
  * @see {@link ./format.test.ts}
  * @see {@link ./run.test.ts}
+ * @see {@link ./mocks.test.ts}
  *
  * Нижчі (кого використовує):
  * @see {@link ../src/types.ts}

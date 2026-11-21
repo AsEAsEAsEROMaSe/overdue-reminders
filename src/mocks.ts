@@ -4,6 +4,7 @@
  *
  * Головний (хто використовує):
  * @see {@link ../test/run.test.ts}
+ * @see {@link ../test/mocks.test.ts}
  *
  * Нижчі (кого використовує):
  * @see {@link ./ports.ts}
@@ -25,8 +26,9 @@ function makeKey(userId: string, day: string): string {
 export class FakeTaskRepo implements TaskRepo {
   tasks: Task[];
 
-  constructor(tasks: Task[]) {
-    this.tasks = tasks;
+  // Беремо копію: зміна масиву ззовні не зачепить сховище
+  constructor(tasks: readonly Task[]) {
+    this.tasks = tasks.slice();
   }
 
   async listNotDone(): Promise<Task[]> {
@@ -43,8 +45,9 @@ export class FakeTaskRepo implements TaskRepo {
 export class FakeUserRepo implements UserRepo {
   users: User[];
 
-  constructor(users: User[]) {
-    this.users = users;
+  // Беремо копію: зміна масиву ззовні не зачепить сховище
+  constructor(users: readonly User[]) {
+    this.users = users.slice();
   }
 
   async get(id: string): Promise<User | undefined> {
