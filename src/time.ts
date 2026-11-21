@@ -34,17 +34,25 @@ interface KyivParts {
 
 // Розкладає момент часу на рік, місяць, день, години, хвилини за Києвом
 function getKyivParts(date: Date): KyivParts {
-  const values: Record<string, string> = {};
-  for (const part of kyivFormatter.formatToParts(date)) {
-    values[part.type] = part.value;
+  const result: KyivParts = { year: '', month: '', day: '', hour: '', minute: '' };
+  const parts = kyivFormatter.formatToParts(date);
+  for (const part of parts) {
+    if (part.type === 'year') {
+      result.year = part.value;
+    }
+    if (part.type === 'month') {
+      result.month = part.value;
+    }
+    if (part.type === 'day') {
+      result.day = part.value;
+    }
+    if (part.type === 'hour') {
+      result.hour = part.value;
+    }
+    if (part.type === 'minute') {
+      result.minute = part.value;
+    }
   }
-  const result: KyivParts = {
-    year: values['year'],
-    month: values['month'],
-    day: values['day'],
-    hour: values['hour'],
-    minute: values['minute'],
-  };
   return result;
 }
 
@@ -54,22 +62,41 @@ export function kyivDay(date: Date): string {
   return parts.year + '-' + parts.month + '-' + parts.day;
 }
 
+// Чи показує київський годинник рівно 00:00
+function isKyivMidnight(date: Date): boolean {
+  const parts = getKyivParts(date);
+  if (parts.hour !== '00') {
+    return false;
+  }
+  if (parts.minute !== '00') {
+    return false;
+  }
+  return true;
+}
+
 // Момент 00:00 за Києвом тієї доби, у якій лежить date.
 // Київ завжди на 2 (зима) або 3 (літо) години попереду UTC,
 // тож пробуємо обидва варіанти і беремо той, де за Києвом рівно 00:00
 export function startOfKyivDay(date: Date): Date {
   const parts = getKyivParts(date);
-  const midnightUtc = Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day));
-  const offsets = [2, 3];
-  for (const hours of offsets) {
-    const candidate = new Date(midnightUtc - hours * HOUR_MS);
-    const candidateParts = getKyivParts(candidate);
-    if (candidateParts.hour === '00') {
-      if (candidateParts.minute === '00') {
-        return candidate;
-      }
-    }
+  const year = Number(parts.year);
+  const month = Number(parts.month);
+  const day = Number(parts.day);
+  // Північ цієї дати за UTC; місяці в Date.UTC рахуються з нуля
+  const midnightUtc = Date.UTC(year, month - 1, day);
+
+  // Зимовий час: Київ на 2 години попереду UTC
+  const winterStart = new Date(midnightUtc - 2 * HOUR_MS);
+  if (isKyivMidnight(winterStart)) {
+    return winterStart;
   }
+
+  // Літній час: Київ на 3 години попереду UTC
+  const summerStart = new Date(midnightUtc - 3 * HOUR_MS);
+  if (isKyivMidnight(summerStart)) {
+    return summerStart;
+  }
+
   throw new Error('Не вдалося знайти початок доби за Києвом');
 }
 

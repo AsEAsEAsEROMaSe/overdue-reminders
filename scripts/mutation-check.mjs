@@ -9,8 +9,14 @@ const MUTATIONS = [
   {
     name: 'початок доби за UTC, без поясу Києва',
     file: 'src/time.ts',
-    from: '        return candidate;',
-    to: '        return new Date(midnightUtc);',
+    from: '    return winterStart;',
+    to: '    return new Date(midnightUtc);',
+  },
+  {
+    name: 'улітку теж зимовий зсув UTC+2',
+    file: 'src/time.ts',
+    from: '    return summerStart;',
+    to: '    return winterStart;',
   },
   {
     name: 'час нагадування за UTC-годиною',
