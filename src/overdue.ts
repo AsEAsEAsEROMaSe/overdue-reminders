@@ -21,13 +21,24 @@ export interface OverdueResult {
 
 // Чи є в задачі справжня дата дедлайну (старі записи можуть її не мати)
 function hasValidDeadline(task: Task): boolean {
-  if (!(task.deadline instanceof Date)) {
+  const isDate = task.deadline instanceof Date;
+  if (isDate === false) {
     return false;
   }
   if (Number.isNaN(task.deadline.getTime())) {
     return false;
   }
   return true;
+}
+
+// Шукає групу виконавця; undefined, якщо такої ще немає
+function findGroup(groups: UserTasks[], userId: string): UserTasks | undefined {
+  for (const group of groups) {
+    if (group.userId === userId) {
+      return group;
+    }
+  }
+  return undefined;
 }
 
 // Прострочена: дедлайн раніше за початок поточної доби за Києвом і статус не done
@@ -52,12 +63,7 @@ export function groupOverdueByUser(tasks: Task[], now: Date): OverdueResult {
       continue;
     }
 
-    let group: UserTasks | undefined = undefined;
-    for (const existing of groups) {
-      if (existing.userId === task.assigneeId) {
-        group = existing;
-      }
-    }
+    let group = findGroup(groups, task.assigneeId);
     if (group === undefined) {
       group = { userId: task.assigneeId, tasks: [] };
       groups.push(group);

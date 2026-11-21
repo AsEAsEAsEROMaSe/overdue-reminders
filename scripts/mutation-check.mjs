@@ -61,6 +61,12 @@ const MUTATIONS = [
     to: '    if (false) {',
   },
   {
+    name: 'групу не знаходимо, кожна задача окремим повідомленням',
+    file: 'src/overdue.ts',
+    from: '      return group;',
+    to: '      return undefined;',
+  },
+  {
     name: 'немає сортування за дедлайном',
     file: 'src/format.ts',
     from: '  sorted.sort(compareByDeadline);\n',
