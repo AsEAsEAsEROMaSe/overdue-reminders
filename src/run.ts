@@ -11,42 +11,19 @@
  * @see {@link ./time.ts}
  * @see {@link ./overdue.ts}
  * @see {@link ./format.ts}
+ * @see {@link ./run.types.ts}
+ * @see {@link ./errors.ts}
  */
 
-import type { TaskRepo, UserRepo, Messenger, SentLog, AttemptLog, Lock } from './ports.ts';
-import { TelegramError } from './types.ts';
+import type { Messenger } from './ports.ts';
 import type { RunReport, UserTasks } from './types.ts';
+import type { RunDeps, UserResult } from './run.types.ts';
+import { TelegramError, SendTimeoutError } from './errors.ts';
 import { kyivDay } from './time.ts';
 import { groupOverdueByUser } from './overdue.ts';
 import { buildReminderText } from './format.ts';
 
 const MAX_ATTEMPTS = 3;
-
-export interface RunDeps {
-  taskRepo: TaskRepo;
-  userRepo: UserRepo;
-  messenger: Messenger;
-  sentLog: SentLog;
-  attemptLog: AttemptLog;
-  lock: Lock;
-  // Скільки чекати відповіді Telegram, мс (наприклад 10000)
-  sendTimeoutMs: number;
-}
-
-// Telegram не відповів вчасно
-class SendTimeoutError extends Error {
-  constructor() {
-    super('Telegram не відповів вчасно');
-  }
-}
-
-// Чим закінчилась обробка одного користувача.
-// already_sent: сьогодні вже отримав, у звіт не пишемо
-interface UserResult {
-  status: 'sent' | 'already_sent' | 'skipped' | 'failed';
-  reason: string;
-  final: boolean;
-}
 
 // Один запуск; якщо інший запуск того ж дня вже йде, нічого не робить
 export async function runDailyReminders(now: Date, deps: RunDeps): Promise<RunReport> {

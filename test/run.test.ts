@@ -4,6 +4,7 @@
  *
  * Нижчі (кого використовує):
  * @see {@link ../src/run.ts}
+ * @see {@link ../src/run.types.ts}
  * @see {@link ../src/mocks.ts}
  * @see {@link ../src/types.ts}
  * @see {@link ./builders.ts}
@@ -11,7 +12,7 @@
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { runDailyReminders } from '../src/run.ts';
-import type { RunDeps } from '../src/run.ts';
+import type { RunDeps } from '../src/run.types.ts';
 import { FakeTaskRepo, FakeUserRepo, FakeMessenger, FakeSentLog, FakeAttemptLog, FakeLock } from '../src/mocks.ts';
 import type { Task, User, RunReport } from '../src/types.ts';
 import {

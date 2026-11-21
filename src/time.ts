@@ -7,7 +7,12 @@
  * @see {@link ./format.ts}
  * @see {@link ./run.ts}
  * @see {@link ../test/time.test.ts}
+ *
+ * Нижчі (кого використовує):
+ * @see {@link ./time.types.ts}
  */
+
+import type { KyivParts } from './time.types.ts';
 
 const REMINDER_HOUR = 10;
 const HOUR_MS = 60 * 60 * 1000;
@@ -23,14 +28,6 @@ const kyivFormatter = new Intl.DateTimeFormat('en-GB', {
   minute: '2-digit',
   hourCycle: 'h23',
 });
-
-interface KyivParts {
-  year: string;
-  month: string;
-  day: string;
-  hour: string;
-  minute: string;
-}
 
 // Розкладає момент часу на рік, місяць, день, години, хвилини за Києвом
 function getKyivParts(date: Date): KyivParts {

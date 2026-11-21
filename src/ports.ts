@@ -4,6 +4,7 @@
  *
  * Головний (хто використовує):
  * @see {@link ./run.ts}
+ * @see {@link ./run.types.ts}
  * @see {@link ./mocks.ts}
  *
  * Нижчі (кого використовує):

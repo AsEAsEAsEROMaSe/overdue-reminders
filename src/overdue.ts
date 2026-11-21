@@ -9,15 +9,12 @@
  * Нижчі (кого використовує):
  * @see {@link ./time.ts}
  * @see {@link ./types.ts}
+ * @see {@link ./overdue.types.ts}
  */
 
 import { startOfKyivDay } from './time.ts';
 import type { Task, UserTasks, SkippedItem } from './types.ts';
-
-export interface OverdueResult {
-  groups: UserTasks[];
-  skipped: SkippedItem[];
-}
+import type { OverdueResult } from './overdue.types.ts';
 
 // Чи є в задачі справжня дата дедлайну (старі записи можуть її не мати)
 function hasValidDeadline(task: Task): boolean {

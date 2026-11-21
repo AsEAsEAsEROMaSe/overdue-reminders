@@ -27,14 +27,20 @@ npm run check:mutations # 25 навмисних помилок у коді, ко
 
 ## Дерево проєкту
 
-Від головного файлу донизу:
+Від головного файлу донизу. Типи винесено з робочого коду: у кожного модуля поруч свій файл `*.types.ts`, спільні типи в `types.ts`, класи помилок в `errors.ts`.
 
 - `src/run.ts`: один запуск, блокування, дублі, спроби, таймаут
+  - `src/run.types.ts`: RunDeps, UserResult
+    - `src/ports.ts`
   - `src/ports.ts`: інтерфейси сховищ, месенджера, журналів, блокування
     - `src/types.ts`
-  - `src/types.ts`: Task, User, TelegramError, звіт
+  - `src/types.ts`: Task, User, звіт
+  - `src/errors.ts`: TelegramError, SendTimeoutError
   - `src/time.ts`: доба, початок доби, час нагадування, формат дати за Києвом
+    - `src/time.types.ts`: KyivParts
   - `src/overdue.ts`: вибір прострочених задач і групування за виконавцем
+    - `src/overdue.types.ts`: OverdueResult
+      - `src/types.ts`
     - `src/time.ts`
     - `src/types.ts`
   - `src/format.ts`: текст повідомлення
@@ -44,8 +50,10 @@ npm run check:mutations # 25 навмисних помилок у коді, ко
 Для тестів:
 
 - `src/mocks.ts`: класи `FakeTaskRepo`, `FakeUserRepo`, `FakeMessenger`, `FakeSentLog`, `FakeAttemptLog`, `FakeLock`; дані в звичайних масивах; `FakeMessenger` падає для заданого chatId з 429, 403 або зависає
+  - `src/mocks.types.ts`: FailureKind, SentMessage, Failure
   - `src/ports.ts`
   - `src/types.ts`
+  - `src/errors.ts`
 - `test/builders.ts`: будівники тестових даних, зокрема «старі» записи без полів
   - `src/types.ts`
 - `test/time.test.ts`, `test/overdue.test.ts`, `test/format.test.ts`, `test/run.test.ts`

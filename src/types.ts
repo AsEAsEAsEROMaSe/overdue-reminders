@@ -1,10 +1,11 @@
 /**
- * @file Типи даних: задача, користувач, помилка Telegram, звіт запуску.
+ * @file Типи даних: задача, користувач, звіт запуску.
  * @module types
  *
  * Головний (хто використовує):
  * @see {@link ./ports.ts}
  * @see {@link ./overdue.ts}
+ * @see {@link ./overdue.types.ts}
  * @see {@link ./format.ts}
  * @see {@link ./run.ts}
  * @see {@link ./mocks.ts}
@@ -25,16 +26,6 @@ export interface Task {
 export interface User {
   id: string;
   telegramChatId: string;
-}
-
-// Помилка відправки з кодом Telegram (429, 403 тощо)
-export class TelegramError extends Error {
-  code: number;
-
-  constructor(code: number) {
-    super('Telegram error ' + code);
-    this.code = code;
-  }
 }
 
 // Задачі одного виконавця

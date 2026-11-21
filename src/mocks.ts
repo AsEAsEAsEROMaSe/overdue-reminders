@@ -8,11 +8,14 @@
  * Нижчі (кого використовує):
  * @see {@link ./ports.ts}
  * @see {@link ./types.ts}
+ * @see {@link ./mocks.types.ts}
+ * @see {@link ./errors.ts}
  */
 
 import type { TaskRepo, UserRepo, Messenger, SentLog, AttemptLog, Lock } from './ports.ts';
-import { TelegramError } from './types.ts';
 import type { Task, User } from './types.ts';
+import type { FailureKind, SentMessage, Failure } from './mocks.types.ts';
+import { TelegramError } from './errors.ts';
 
 // Ключ запису для журналів: користувач і день разом
 function makeKey(userId: string, day: string): string {
@@ -52,19 +55,6 @@ export class FakeUserRepo implements UserRepo {
     }
     return undefined;
   }
-}
-
-// Як має впасти відправка на заданий chatId
-export type FailureKind = 'rate_limited' | 'blocked' | 'hang';
-
-export interface SentMessage {
-  chatId: string;
-  text: string;
-}
-
-interface Failure {
-  chatId: string;
-  kind: FailureKind;
 }
 
 export class FakeMessenger implements Messenger {
