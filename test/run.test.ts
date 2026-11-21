@@ -907,6 +907,15 @@ describe('runDailyReminders: блокування, кожна змінна', () 
     expect(await deps.lock.acquire('daily-reminders:' + DAY)).toBe(false);
   });
 
+  it('запуск не знімає блокування іншого дня', async () => {
+    const deps = makeDeps(threeOverdueTasks(), USERS, new FakeMessenger());
+    await deps.lock.acquire('daily-reminders:2026-03-09');
+
+    await runDailyReminders(NOW, deps);
+
+    expect(await deps.lock.acquire('daily-reminders:2026-03-09')).toBe(false);
+  });
+
   it('при зайнятому блокуванні задачі навіть не читаються', async () => {
     const taskRepo = new CountingTaskRepo(threeOverdueTasks());
     const deps = buildDeps(taskRepo, new FakeUserRepo(USERS), new FakeMessenger(), new FakeSentLog());

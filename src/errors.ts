@@ -6,6 +6,8 @@
  * @see {@link ./run.ts}
  * @see {@link ./mocks.ts}
  * @see {@link ../test/faulty.ts}
+ * @see {@link ../test/errors.test.ts}
+ * @see {@link ../test/mocks.test.ts}
  */
 
 // Помилка відправки з кодом Telegram (429, 403 тощо)

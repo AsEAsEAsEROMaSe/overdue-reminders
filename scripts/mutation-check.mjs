@@ -181,6 +181,30 @@ const MUTATIONS = [
     to: '  try {\n    if (!acquired) {\n      return report;\n    }\n',
   },
   {
+    name: 'release звільняє всі ключі',
+    file: 'src/mocks.ts',
+    from: '      if (takenKey !== key) {',
+    to: '      if (false) {',
+  },
+  {
+    name: 'clearFailure прибирає всі збої',
+    file: 'src/mocks.ts',
+    from: '      if (failure.chatId !== chatId) {\n        left.push(failure);',
+    to: '      if (false) {\n        left.push(failure);',
+  },
+  {
+    name: 'лічильник спроб спільний для всіх',
+    file: 'src/mocks.ts',
+    from: '      if (attempt === key) {',
+    to: '      if (true) {',
+  },
+  {
+    name: 'код TelegramError не зберігається',
+    file: 'src/errors.ts',
+    from: '    this.code = code;',
+    to: '    this.code = 0;',
+  },
+  {
     name: 'немає Lock',
     file: 'src/run.ts',
     from: '  if (!acquired) {',
