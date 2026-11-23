@@ -157,6 +157,14 @@ function sendWithTimeout(messenger: Messenger, chatId: string, text: string, tim
       reject(error);
     }
 
-    messenger.send(chatId, text).then(onSent, onError);
+    // send може впасти одразу, ще не повернувши Promise: таймер теж прибираємо
+    let sending: Promise<void>;
+    try {
+      sending = messenger.send(chatId, text);
+    } catch (error) {
+      onError(error);
+      return;
+    }
+    sending.then(onSent, onError);
   });
 }

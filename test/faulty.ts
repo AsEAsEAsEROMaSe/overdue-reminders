@@ -238,3 +238,16 @@ export class MessengerThrowingString implements Messenger {
     throw 'щось пішло не так';
   }
 }
+
+// Не async: кидає помилку одразу, ще до того, як поверне Promise
+export class MessengerThrowingSync implements Messenger {
+  code: number;
+
+  constructor(code: number) {
+    this.code = code;
+  }
+
+  send(): Promise<void> {
+    throw new TelegramError(this.code);
+  }
+}

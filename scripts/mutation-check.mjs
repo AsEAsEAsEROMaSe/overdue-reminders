@@ -206,6 +206,12 @@ const MUTATIONS = [
     to: '    this.code = 0;',
   },
   {
+    name: 'синхронний збій send не прибирає таймер',
+    file: 'src/run.ts',
+    from: '    } catch (error) {\n      onError(error);\n      return;\n    }',
+    to: '    } catch (error) {\n      reject(error);\n      return;\n    }',
+  },
+  {
     name: 'немає Lock',
     file: 'src/run.ts',
     from: '  if (!acquired) {',

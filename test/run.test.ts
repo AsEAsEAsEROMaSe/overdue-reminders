@@ -32,6 +32,7 @@ import {
   LockFailingOnAcquire,
   MessengerFailingWithCode,
   MessengerThrowingString,
+  MessengerThrowingSync,
 } from './faulty.ts';
 import {
   makeTask,
@@ -400,6 +401,28 @@ describe('runDailyReminders: таймаут відправки', () => {
 
     await runDailyReminders(nowAt10(), deps);
 
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('send падає одразу, без Promise: таймер прибрано, у звіті blocked', async () => {
+    vi.useFakeTimers();
+    const messenger = new MessengerThrowingSync(403);
+    const deps = buildDeps(new FakeTaskRepo(oneOverdueTaskForAnna()), new FakeUserRepo(threeUsers()), messenger, new FakeSentLog());
+
+    const report = await runDailyReminders(nowAt10(), deps);
+
+    expect(report.failed).toEqual([{ userId: 'anna', reason: 'blocked', final: true }]);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('send падає одразу з 429: таймер прибрано, спробуємо наступним запуском', async () => {
+    vi.useFakeTimers();
+    const messenger = new MessengerThrowingSync(429);
+    const deps = buildDeps(new FakeTaskRepo(oneOverdueTaskForAnna()), new FakeUserRepo(threeUsers()), messenger, new FakeSentLog());
+
+    const report = await runDailyReminders(nowAt10(), deps);
+
+    expect(report.failed).toEqual([{ userId: 'anna', reason: 'rate_limited', final: false }]);
     expect(vi.getTimerCount()).toBe(0);
   });
 
