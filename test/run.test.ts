@@ -682,9 +682,27 @@ describe('runDailyReminders: вхідні дані не змінюються', (
     messenger.failFor('chat-bohdan', 'blocked');
     const deps = makeDeps(tasks, users, messenger);
 
-    await runDailyReminders(nowAt10(), deps);
-    await runDailyReminders(laterSameDay(), deps);
+    const firstReport = await runDailyReminders(nowAt10(), deps);
+    const secondReport = await runDailyReminders(laterSameDay(), deps);
 
+    // Звіти теж перевіряємо: спроба змінити заморожений об'єкт кинула б TypeError,
+    // а catch записав би його як error, і без цієї перевірки тест лишився б зеленим
+    expect(firstReport).toEqual({
+      sent: ['anna'],
+      skipped: [
+        { kind: 'task', id: 't4', reason: 'no_deadline' },
+        { kind: 'user', id: 'vira', reason: 'no_chat_id' },
+      ],
+      failed: [{ userId: 'bohdan', reason: 'blocked', final: true }],
+    });
+    expect(secondReport).toEqual({
+      sent: [],
+      skipped: [
+        { kind: 'task', id: 't4', reason: 'no_deadline' },
+        { kind: 'user', id: 'vira', reason: 'no_chat_id' },
+      ],
+      failed: [{ userId: 'bohdan', reason: 'blocked', final: true }],
+    });
     expect(tasks).toEqual([
       makeTask('t1', 'anna', 'Рахунок', '2026-03-05T10:00:00Z'),
       makeTask('t2', 'bohdan', 'Звіт', '2026-03-06T10:00:00Z'),
@@ -692,6 +710,16 @@ describe('runDailyReminders: вхідні дані не змінюються', (
       makeTaskWithoutDeadline('t4', 'anna'),
     ]);
     expect(users).toEqual([makeUser('anna'), makeUser('bohdan'), makeUserWithoutChatId('vira')]);
+  });
+
+  it('заморожені задачі й користувачі: звичайна доставка проходить без помилок', async () => {
+    const tasks = freezeTasks(threeOverdueTasks());
+    const users = freezeUsers(threeUsers());
+    const deps = makeDeps(tasks, users, new FakeMessenger());
+
+    const report = await runDailyReminders(nowAt10(), deps);
+
+    expect(report).toEqual({ sent: ['anna', 'bohdan', 'vira'], skipped: [], failed: [] });
   });
 
   it('кожен запуск повертає новий звіт: зміна одного не зачіпає інший', async () => {

@@ -230,6 +230,12 @@ const MUTATIONS = [
     to: "reason: 'error'",
   },
   {
+    name: 'запуск змінює задачу з бази',
+    file: 'src/run.ts',
+    from: '  const alreadySent = await deps.sentLog.has(userId, day);',
+    to: '  group.tasks[0].title = group.tasks[0].title;\n  const alreadySent = await deps.sentLog.has(userId, day);',
+  },
+  {
     name: 'немає Lock',
     file: 'src/run.ts',
     from: '  if (!acquired) {',
