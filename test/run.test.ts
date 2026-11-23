@@ -30,6 +30,7 @@ import {
   AttemptLogFailingOn,
   RecordingLock,
   LockFailingOnAcquire,
+  LockFailingOnRelease,
   MessengerFailingWithCode,
   MessengerThrowingString,
   MessengerThrowingSync,
@@ -1096,6 +1097,32 @@ describe('runDailyReminders: блокування, кожна змінна', () 
 
     expect(taskRepo.calls).toBe(0);
     expect(lock.released).toEqual([]);
+    expect(messenger.attempts).toEqual([]);
+  });
+
+  it('release падає: звіт не губиться, повідомлення вже розіслані', async () => {
+    const taskRepo = new CountingTaskRepo(threeOverdueTasks());
+    const lock = new LockFailingOnRelease();
+    const messenger = new FakeMessenger();
+    const deps = depsWithLock(taskRepo, messenger, lock);
+
+    const report = await runDailyReminders(nowAt10(), deps);
+
+    expect(report.sent).toEqual(['anna', 'bohdan', 'vira']);
+    expect(report.failed).toEqual([]);
+    expect(sentChatIds(messenger)).toEqual(['chat-anna', 'chat-bohdan', 'chat-vira']);
+    expect(lock.released).toEqual(['daily-reminders:' + DAY]);
+  });
+
+  it('release падає після збою бази: назовні йде помилка бази, а не блокування', async () => {
+    const taskRepo = new TaskRepoFailingOnce(threeOverdueTasks());
+    const lock = new LockFailingOnRelease();
+    const messenger = new FakeMessenger();
+    const deps = depsWithLock(taskRepo, messenger, lock);
+
+    await expect(runDailyReminders(nowAt10(), deps)).rejects.toThrow('база недоступна');
+
+    expect(lock.released).toEqual(['daily-reminders:' + DAY]);
     expect(messenger.attempts).toEqual([]);
   });
 });

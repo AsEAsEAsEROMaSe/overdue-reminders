@@ -65,7 +65,12 @@ export async function runDailyReminders(now: Date, deps: RunDeps): Promise<RunRe
       }
     }
   } finally {
-    await deps.lock.release(lockKey);
+    // Збій зняття блокування не губить звіт і не ховає справжню помилку
+    try {
+      await deps.lock.release(lockKey);
+    } catch (error) {
+      // Нічого не робимо: блокування нового дня має інший ключ
+    }
   }
 
   return report;

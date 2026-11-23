@@ -244,8 +244,14 @@ const MUTATIONS = [
   {
     name: 'немає release',
     file: 'src/run.ts',
-    from: '    await deps.lock.release(lockKey);\n',
+    from: '      await deps.lock.release(lockKey);\n',
     to: '',
+  },
+  {
+    name: 'збій release губить звіт (без try навколо release)',
+    file: 'src/run.ts',
+    from: '    } catch (error) {\n      // Нічого не робимо: блокування нового дня має інший ключ\n    }\n',
+    to: '    } finally {\n    }\n',
   },
   {
     name: 'немає зовнішнього catch (збій сховища)',

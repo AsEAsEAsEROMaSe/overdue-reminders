@@ -221,6 +221,20 @@ export class LockFailingOnAcquire implements Lock {
   }
 }
 
+// Блокування береться, але зняти його не вдається
+export class LockFailingOnRelease implements Lock {
+  released: string[] = [];
+
+  async acquire(): Promise<boolean> {
+    return true;
+  }
+
+  async release(key: string): Promise<void> {
+    this.released.push(key);
+    throw new Error('не вдалося зняти блокування');
+  }
+}
+
 // Telegram відповідає помилкою з заданим кодом
 export class MessengerFailingWithCode implements Messenger {
   code: number;
