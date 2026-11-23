@@ -1,7 +1,8 @@
 // Мутаційна перевірка: по черзі вносить у код відому помилку, запускає тести
-// і перевіряє, що хоч один тест упав. Після кожної мутації файл повертається як був.
+// і перевіряє, що впало щонайменше MIN_FAILED тестів. Після кожної мутації файл повертається як був,
+// навіть після Ctrl+C.
 // Запуск: node scripts/mutation-check.mjs
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, rmSync, existsSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 
 // name: коротка назва; file: де ламаємо; from: що міняємо; to: на що
@@ -291,18 +292,57 @@ const MUTATIONS = [
 ];
 
 const REPORT_FILE = '.vitest/mutation-report.json';
+// Скільки тестів мінімум мають помітити кожну мутацію
+const MIN_FAILED = 2;
+// Скільки чекати один прогін тестів, мс: зависла мутація теж рахується спійманою
+const RUN_TIMEOUT_MS = 120000;
 
-// Запускає vitest і повертає назви тестів, що впали
+// Ctrl+C: не вмирати одразу, а дати finally повернути файл.
+// Сам vitest від Ctrl+C завершиться, і runTests побачить сигнал
+process.on('SIGINT', function () {});
+
+// Запускає vitest і повертає список того, що впало:
+// назви тестів, файли тестів, що не завантажились, або опис збою самого прогону
 function runTests() {
+  // Старий звіт видаляємо, щоб випадково не прочитати попередній прогін
+  rmSync(REPORT_FILE, { force: true });
+
   const args = ['node_modules/vitest/vitest.mjs', 'run', '--reporter=json', '--outputFile=' + REPORT_FILE];
-  spawnSync(process.execPath, args, { encoding: 'utf8' });
-  const report = JSON.parse(readFileSync(REPORT_FILE, 'utf8'));
+  const result = spawnSync(process.execPath, args, { encoding: 'utf8', timeout: RUN_TIMEOUT_MS });
+
+  if (result.signal === 'SIGINT') {
+    throw new Error('Перервано через Ctrl+C');
+  }
+
   const failed = [];
+  if (result.error !== undefined) {
+    failed.push('прогін тестів не завершився: ' + result.error.message);
+    return failed;
+  }
+  if (!existsSync(REPORT_FILE)) {
+    failed.push('vitest не записав звіт, код виходу ' + result.status);
+    return failed;
+  }
+
+  const report = JSON.parse(readFileSync(REPORT_FILE, 'utf8'));
   for (const file of report.testResults) {
+    // Файл тестів не завантажився (наприклад, синтаксична помилка в коді)
+    if (file.status === 'failed') {
+      if (file.assertionResults.length === 0) {
+        failed.push('не завантажився ' + file.name);
+      }
+    }
     for (const test of file.assertionResults) {
       if (test.status === 'failed') {
         failed.push(test.title);
       }
+    }
+  }
+
+  // Тести впали, але звіт не назвав жодного: однаково вважаємо падінням
+  if (result.status !== 0) {
+    if (failed.length === 0) {
+      failed.push('vitest завершився з кодом ' + result.status);
     }
   }
   return failed;
@@ -315,6 +355,7 @@ if (baseline.length > 0) {
 }
 
 let survived = 0;
+let weak = 0;
 let number = 1;
 for (const mutation of MUTATIONS) {
   const original = readFileSync(mutation.file, 'utf8');
@@ -327,23 +368,42 @@ for (const mutation of MUTATIONS) {
   try {
     writeFileSync(mutation.file, original.replace(mutation.from, mutation.to));
     failed = runTests();
+  } catch (error) {
+    writeFileSync(mutation.file, original);
+    console.log(String(error) + '. Файл ' + mutation.file + ' повернуто як був.');
+    process.exit(130);
   } finally {
-    // Повертаємо файл як був, навіть якщо тести впали з винятком
+    // Повертаємо файл як був за будь-якого результату
     writeFileSync(mutation.file, original);
   }
 
+  const where = ' (' + mutation.file + ')';
   if (failed.length === 0) {
     survived = survived + 1;
-    console.log(number + '. ВИЖИЛА  ' + mutation.name + ' (' + mutation.file + '): жоден тест не впав');
-  } else {
-    console.log(number + '. спіймано ' + mutation.name + ' (' + mutation.file + '): впало ' + failed.length);
+    console.log(number + '. ВИЖИЛА  ' + mutation.name + where + ': жоден тест не впав');
+  }
+  if (failed.length > 0) {
+    if (failed.length < MIN_FAILED) {
+      weak = weak + 1;
+      console.log(number + '. СЛАБКО  ' + mutation.name + where + ': впало лише ' + failed.length + ' (' + failed.join('; ') + ')');
+    }
+    if (failed.length >= MIN_FAILED) {
+      console.log(number + '. спіймано ' + mutation.name + where + ': впало ' + failed.length);
+    }
   }
   number = number + 1;
 }
 
 if (survived === 0) {
-  console.log('Спіймано всі мутації: ' + MUTATIONS.length);
-} else {
+  if (weak === 0) {
+    console.log('Спіймано всі мутації: ' + MUTATIONS.length + ', кожну щонайменше ' + MIN_FAILED + ' тестами');
+  }
+}
+if (survived > 0) {
   console.log('Вижило мутацій: ' + survived + ' з ' + MUTATIONS.length);
+  process.exitCode = 1;
+}
+if (weak > 0) {
+  console.log('Мутацій, які ловить менше ' + MIN_FAILED + ' тестів: ' + weak);
   process.exitCode = 1;
 }
