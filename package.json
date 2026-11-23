@@ -8,7 +8,8 @@
     "typecheck": "node node_modules/typescript/bin/tsc --noEmit",
     "check:headers": "node scripts/check-headers.mjs",
     "check:mutations": "node scripts/mutation-check.mjs",
-    "coverage": "node node_modules/vitest/vitest.mjs run --coverage --coverage.include=src --coverage.reporter=text"
+    "coverage": "node node_modules/vitest/vitest.mjs run --coverage --coverage.include=src --coverage.reporter=text",
+    "demo": "node scripts/demo.ts"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",

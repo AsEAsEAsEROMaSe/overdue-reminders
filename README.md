@@ -20,6 +20,7 @@ npm run typecheck       # tsc --noEmit
 npm run check:headers   # звірка JSDoc-шапок з import
 npm run check:mutations # 47 навмисних помилок у коді, кожну мають зловити тести
 npm run coverage        # які рядки й гілки src/ виконують тести
+npm run demo            # імітація дня в консолі: 429, 403, таймаут, погані дані, повтор, блокування
 ```
 
 На диску проєкту не працюють символьні посилання. Через це `npm install` без `--no-bin-links` падає з EPERM, а `npx vitest` і `npx tsc` не знаходять бінарників.
