@@ -1,35 +1,53 @@
-// Імітація одного дня нагадувань у консолі: справжній runDailyReminders на моках.
-// Запуск: npm run demo
+// Імітація дня нагадувань у консолі: справжній runDailyReminders на моках.
+// Запуск: npm run demo (без кольорів: NO_COLOR=1 npm run demo)
 // Усі chat_id вигадані, справжнього Telegram немає.
 import { runDailyReminders } from '../src/run.ts';
 import { isReminderTime, formatKyivDate } from '../src/time.ts';
 import { FakeTaskRepo, FakeUserRepo, FakeMessenger, FakeSentLog, FakeAttemptLog, FakeLock } from '../src/mocks.ts';
-import type { Messenger } from '../src/ports.ts';
 import type { RunDeps } from '../src/run.types.ts';
 import type { RunReport, Task, User } from '../src/types.ts';
 
 // Скільки чекати відповіді Telegram у демо, мс (справжнє очікування)
 const SEND_TIMEOUT_MS = 1000;
 
-// Месенджер, що друкує кожну відправку; збої бере з FakeMessenger
-class ConsoleMessenger implements Messenger {
-  fake = new FakeMessenger();
+// Виконавці з простроченими задачами, у порядку виводу
+const PEOPLE = ['anna', 'bohdan', 'vira', 'dmytro'];
 
-  async send(chatId: string, text: string): Promise<void> {
-    console.log('  → Telegram ' + chatId + ': відправляю...');
-    try {
-      await this.fake.send(chatId, text);
-    } catch (error) {
-      console.log('  ✗ ' + chatId + ': ' + String(error));
-      throw error;
-    }
-    console.log('  ✓ ' + chatId + ' отримав:');
-    const lines = text.split('\n');
-    for (const line of lines) {
-      console.log('      ' + line);
-    }
+// ===== Кольори =====
+
+// Обгортає текст ANSI-кодом кольору; з NO_COLOR повертає текст як є
+function paint(code: string, text: string): string {
+  if (process.env.NO_COLOR !== undefined) {
+    return text;
   }
+  return '\x1b[' + code + 'm' + text + '\x1b[0m';
 }
+
+function green(text: string): string {
+  return paint('32', text);
+}
+
+function red(text: string): string {
+  return paint('31', text);
+}
+
+function yellow(text: string): string {
+  return paint('33', text);
+}
+
+function cyan(text: string): string {
+  return paint('1;36', text);
+}
+
+function gray(text: string): string {
+  return paint('90', text);
+}
+
+function bold(text: string): string {
+  return paint('1', text);
+}
+
+// ===== Дані =====
 
 function makeTask(id: string, assigneeId: string, title: string, deadlineIso: string, status: Task['status']): Task {
   const task: Task = {
@@ -73,35 +91,121 @@ function makeUsers(): User[] {
   return users;
 }
 
-function printTitle(title: string): void {
+// ===== Вивід =====
+
+// Причина збою людською мовою
+function failureText(reason: string): string {
+  if (reason === 'rate_limited') {
+    return '429, забагато запитів';
+  }
+  if (reason === 'blocked') {
+    return '403, бот заблоковано';
+  }
+  if (reason === 'timeout') {
+    return 'не відповів за ' + SEND_TIMEOUT_MS / 1000 + ' с';
+  }
+  if (reason === 'attempts_exhausted') {
+    return 'спроби на сьогодні вичерпано';
+  }
+  return 'невідома помилка';
+}
+
+// Причина пропуску людською мовою
+function skippedText(reason: string): string {
+  if (reason === 'no_deadline') {
+    return 'без дедлайну';
+  }
+  if (reason === 'no_assignee') {
+    return 'без виконавця';
+  }
+  if (reason === 'no_chat_id') {
+    return 'без chat_id';
+  }
+  if (reason === 'user_not_found') {
+    return 'немає в базі';
+  }
+  return reason;
+}
+
+function printHeader(date: Date, title: string): void {
+  const time = formatKyivDate(date);
   console.log('');
-  console.log('=== ' + title);
+  console.log(cyan('━━ ' + time + '  ' + title + ' ' + '━'.repeat(Math.max(3, 44 - title.length))));
 }
 
-function printReport(report: RunReport): void {
-  console.log('  звіт:');
-  console.log('    sent:    ' + JSON.stringify(report.sent));
-  console.log('    skipped:');
-  for (const item of report.skipped) {
-    console.log('      ' + item.kind + ' ' + item.id + ': ' + item.reason);
+// Рядок одного виконавця: значок, ім'я, що сталося
+function printPerson(mark: string, name: string, text: string): void {
+  console.log('  ' + mark + ' ' + bold(name.padEnd(8)) + ' ' + text);
+}
+
+// Текст повідомлення в рамці
+function printMessage(text: string): void {
+  const lines = text.split('\n');
+  for (const line of lines) {
+    console.log('             ' + gray('│ ') + line);
   }
-  console.log('    failed:');
-  for (const item of report.failed) {
-    let note = 'наступний запуск спробує знову';
-    if (item.final) {
-      note = 'сьогодні більше не пробуємо';
+}
+
+// Друкує результат запуску: по рядку на виконавця і пропущені одним рядком.
+// sentFrom: з якого номера в messenger.sent починаються повідомлення цього запуску.
+// showSkipped: пропущені однакові весь день, тож друкуємо їх лише в першому запуску дня
+function printReport(report: RunReport, messenger: FakeMessenger, sentFrom: number, showSkipped: boolean): void {
+  for (const person of PEOPLE) {
+    if (report.sent.includes(person)) {
+      printPerson(green('✓'), person, green('нагадування доставлено'));
+      for (let i = sentFrom; i < messenger.sent.length; i = i + 1) {
+        if (messenger.sent[i].chatId === 'chat-' + person) {
+          printMessage(messenger.sent[i].text);
+        }
+      }
+      continue;
     }
-    console.log('      ' + item.userId + ': ' + item.reason + ' (' + note + ')');
+
+    let failedItem = undefined;
+    for (const item of report.failed) {
+      if (item.userId === person) {
+        failedItem = item;
+      }
+    }
+    if (failedItem !== undefined) {
+      const text = failureText(failedItem.reason);
+      if (failedItem.reason === 'attempts_exhausted') {
+        printPerson(red('✗'), person, red(text));
+        continue;
+      }
+      if (failedItem.final) {
+        printPerson(red('✗'), person, red(text) + gray('  сьогодні більше не пробуємо'));
+        continue;
+      }
+      printPerson(yellow('↻'), person, yellow(text) + gray('  спробуємо наступним запуском'));
+      continue;
+    }
+
+    printPerson(gray('·'), person, gray('сьогодні вже доставлено'));
+  }
+
+  if (showSkipped === false) {
+    return;
+  }
+  const parts: string[] = [];
+  for (const item of report.skipped) {
+    parts.push(item.id + ' ' + skippedText(item.reason));
+  }
+  if (parts.length > 0) {
+    console.log(gray('  пропущено: ' + parts.join(', ')));
   }
 }
 
-// Час за Києвом для заголовка
-function kyiv(date: Date): string {
-  return formatKyivDate(date) + ' за Києвом';
+// Запускає один прогін і друкує його результат
+async function runAndPrint(date: Date, title: string, deps: RunDeps, messenger: FakeMessenger, showSkipped: boolean): Promise<void> {
+  printHeader(date, title);
+  const sentFrom = messenger.sent.length;
+  const report = await runDailyReminders(date, deps);
+  printReport(report, messenger, sentFrom, showSkipped);
 }
 
 async function main(): Promise<void> {
-  const messenger = new ConsoleMessenger();
+  const messenger = new FakeMessenger();
   const deps: RunDeps = {
     taskRepo: new FakeTaskRepo(makeTasks()),
     userRepo: new FakeUserRepo(makeUsers()),
@@ -113,54 +217,40 @@ async function main(): Promise<void> {
   };
 
   // Що зламано в Telegram на початку дня
-  messenger.fake.failFor('chat-bohdan', 'rate_limited');
-  messenger.fake.failFor('chat-vira', 'blocked');
-  messenger.fake.failFor('chat-dmytro', 'hang');
+  messenger.failFor('chat-bohdan', 'rate_limited');
+  messenger.failFor('chat-vira', 'blocked');
+  messenger.failFor('chat-dmytro', 'hang');
 
-  console.log('Імітація: нагадування про прострочені задачі, 10 березня 2026');
-  console.log('anna: дві прострочені, одна на завтра, одна зроблена, один старий запис без дедлайну');
-  console.log('bohdan: Telegram відповідає 429 (забагато запитів)');
-  console.log('vira: заблокувала бота, 403');
-  console.log('dmytro: Telegram не відповідає, таймаут ' + SEND_TIMEOUT_MS + ' мс');
-  console.log('hryhorii: немає chat_id; nobody: такого користувача немає');
+  console.log(bold('Нагадування про прострочені задачі') + gray('  імітація, час за Києвом'));
+  console.log(gray('Telegram зранку: bohdan отримує 429, vira заблокувала бота, dmytro не відповідає'));
 
   const at9 = new Date('2026-03-10T07:00:00Z');
-  printTitle(kyiv(at9) + ': планувальник питає isReminderTime');
-  console.log('  isReminderTime = ' + isReminderTime(at9) + ', ще рано, нічого не робимо');
+  printHeader(at9, 'планувальник');
+  console.log(gray('  ще не 10:00, запуску немає (isReminderTime = ' + isReminderTime(at9) + ')'));
 
+  // Запуск 1 і одночасно другий процес
   const at10 = new Date('2026-03-10T08:00:00Z');
-  printTitle(kyiv(at10) + ': isReminderTime = ' + isReminderTime(at10) + ', запуск 1');
-  // Другий запуск у той самий момент, поки перший ще працює
+  printHeader(at10, 'запуск 1');
   const firstRun = runDailyReminders(at10, deps);
-  const secondReport = await runDailyReminders(at10, deps);
+  const parallelReport = await runDailyReminders(at10, deps);
   const firstReport = await firstRun;
-  printReport(firstReport);
+  printReport(firstReport, messenger, 0, true);
+  if (parallelReport.sent.length === 0) {
+    console.log(gray('  ⏸ другий процес стартував одночасно: блокування зайняте, він нічого не робить'));
+  }
 
-  printTitle(kyiv(at10) + ': другий процес стартував одночасно з першим');
-  console.log('  блокування дня вже зайняте, нічого не шле');
-  printReport(secondReport);
+  messenger.clearFailure('chat-bohdan');
+  await runAndPrint(new Date('2026-03-10T08:15:00Z'), 'запуск 2, Telegram пропускає bohdan', deps, messenger, false);
+  await runAndPrint(new Date('2026-03-10T08:30:00Z'), 'запуск 3', deps, messenger, false);
+  await runAndPrint(new Date('2026-03-10T08:45:00Z'), 'запуск 4', deps, messenger, false);
 
-  messenger.fake.clearFailure('chat-bohdan');
-  const at1015 = new Date('2026-03-10T08:15:00Z');
-  printTitle(kyiv(at1015) + ': запуск 2, Telegram знову пропускає bohdan');
-  printReport(await runDailyReminders(at1015, deps));
-
-  const at1030 = new Date('2026-03-10T08:30:00Z');
-  printTitle(kyiv(at1030) + ': запуск 3, дублів бути не має');
-  printReport(await runDailyReminders(at1030, deps));
-
-  const at1045 = new Date('2026-03-10T08:45:00Z');
-  printTitle(kyiv(at1045) + ': запуск 4, спроби dmytro вичерпано');
-  printReport(await runDailyReminders(at1045, deps));
-
-  messenger.fake.clearFailure('chat-vira');
-  messenger.fake.clearFailure('chat-dmytro');
-  const nextDay = new Date('2026-03-11T08:00:00Z');
-  printTitle(kyiv(nextDay) + ': нова доба, vira розблокувала бота, Telegram відповідає всім');
-  printReport(await runDailyReminders(nextDay, deps));
+  messenger.clearFailure('chat-vira');
+  messenger.clearFailure('chat-dmytro');
+  await runAndPrint(new Date('2026-03-11T08:00:00Z'), 'наступний день, Telegram працює', deps, messenger, true);
 
   console.log('');
-  console.log('Усього доставлено повідомлень: ' + messenger.fake.sent.length + ', спроб відправки: ' + messenger.fake.attempts.length);
+  console.log(cyan('━━ Підсумок'));
+  console.log('  доставлено ' + green(String(messenger.sent.length)) + ', спроб відправки ' + messenger.attempts.length);
 }
 
 main();
