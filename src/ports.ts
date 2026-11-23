@@ -42,8 +42,10 @@ export interface AttemptLog {
   // Додати одну спробу
   add(userId: string, day: string): Promise<void>;
   // Більше сьогодні не пробувати (403 або вичерпано спроби)
-  stop(userId: string, day: string): Promise<void>;
-  isStopped(userId: string, day: string): Promise<boolean>;
+  // reason: чому зупинили (blocked або attempts_exhausted)
+  stop(userId: string, day: string, reason: string): Promise<void>;
+  // Причина зупинки або undefined, якщо сьогодні ще можна пробувати
+  getStopReason(userId: string, day: string): Promise<string | undefined>;
 }
 
 export interface Lock {

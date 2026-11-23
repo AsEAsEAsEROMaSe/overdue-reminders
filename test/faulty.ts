@@ -178,14 +178,14 @@ export class AttemptLogFailingOn implements AttemptLog {
     await this.realLog.add(userId, day);
   }
 
-  async stop(userId: string, day: string): Promise<void> {
+  async stop(userId: string, day: string, reason: string): Promise<void> {
     this.failIfNeeded('stop', userId);
-    await this.realLog.stop(userId, day);
+    await this.realLog.stop(userId, day, reason);
   }
 
-  async isStopped(userId: string, day: string): Promise<boolean> {
-    this.failIfNeeded('isStopped', userId);
-    return this.realLog.isStopped(userId, day);
+  async getStopReason(userId: string, day: string): Promise<string | undefined> {
+    this.failIfNeeded('getStopReason', userId);
+    return this.realLog.getStopReason(userId, day);
   }
 }
 

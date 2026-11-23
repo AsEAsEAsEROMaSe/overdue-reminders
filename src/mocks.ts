@@ -16,7 +16,7 @@
 
 import type { TaskRepo, UserRepo, Messenger, SentLog, AttemptLog, Lock } from './ports.ts';
 import type { Task, User } from './types.ts';
-import type { FailureKind, SentMessage, Failure } from './mocks.types.ts';
+import type { FailureKind, SentMessage, Failure, StopRecord } from './mocks.types.ts';
 import { TelegramError } from './errors.ts';
 
 // Ключ запису для журналів: користувач і день разом
@@ -123,7 +123,7 @@ export class FakeAttemptLog implements AttemptLog {
   // Один запис «користувач|день» на кожну спробу
   attempts: string[] = [];
   // Ключі «користувач|день», кому сьогодні більше не пробуємо
-  stopped: string[] = [];
+  stopped: StopRecord[] = [];
 
   async count(userId: string, day: string): Promise<number> {
     const key = makeKey(userId, day);
@@ -140,12 +140,18 @@ export class FakeAttemptLog implements AttemptLog {
     this.attempts.push(makeKey(userId, day));
   }
 
-  async stop(userId: string, day: string): Promise<void> {
-    this.stopped.push(makeKey(userId, day));
+  async stop(userId: string, day: string, reason: string): Promise<void> {
+    this.stopped.push({ key: makeKey(userId, day), reason: reason });
   }
 
-  async isStopped(userId: string, day: string): Promise<boolean> {
-    return this.stopped.includes(makeKey(userId, day));
+  async getStopReason(userId: string, day: string): Promise<string | undefined> {
+    const key = makeKey(userId, day);
+    for (const record of this.stopped) {
+      if (record.key === key) {
+        return record.reason;
+      }
+    }
+    return undefined;
   }
 }
 

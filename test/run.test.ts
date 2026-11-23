@@ -453,7 +453,7 @@ describe('runDailyReminders: коди Telegram і ліміт спроб', () => 
     expect(secondReport).toEqual({
       sent: [],
       skipped: [],
-      failed: [{ userId: 'vira', reason: 'attempts_exhausted', final: true }],
+      failed: [{ userId: 'vira', reason: 'blocked', final: true }],
     });
     expect(messenger.attempts).toEqual(['chat-anna', 'chat-bohdan', 'chat-vira']);
   });
@@ -470,6 +470,32 @@ describe('runDailyReminders: коди Telegram і ліміт спроб', () => 
     expect(secondReport.sent).toEqual([]);
     expect(messenger.sent).toEqual([]);
     expect(messenger.attempts).toEqual(['chat-anna']);
+  });
+
+  it('після 403 кожен наступний запуск дня теж пише blocked, а не attempts_exhausted', async () => {
+    const messenger = new FakeMessenger();
+    const deps = makeDeps(oneOverdueTaskForAnna(), threeUsers(), messenger);
+    messenger.failFor('chat-anna', 'blocked');
+
+    await runDailyReminders(nowAt10(), deps);
+    await runDailyReminders(laterSameDay(), deps);
+    const thirdReport = await runDailyReminders(new Date('2026-03-10T09:00:00Z'), deps);
+
+    expect(thirdReport.failed).toEqual([{ userId: 'anna', reason: 'blocked', final: true }]);
+  });
+
+  it('третя невдала спроба з таймаутом далі пише attempts_exhausted, а не timeout', async () => {
+    vi.useFakeTimers();
+    const messenger = new FakeMessenger();
+    const deps = makeDeps(oneOverdueTaskForAnna(), threeUsers(), messenger);
+    messenger.failFor('chat-anna', 'hang');
+    await runWithFakeTimers(nowAt10(), deps);
+    await runWithFakeTimers(nowAt10(), deps);
+    await runWithFakeTimers(nowAt10(), deps);
+
+    const fourthReport = await runWithFakeTimers(laterSameDay(), deps);
+
+    expect(fourthReport.failed).toEqual([{ userId: 'anna', reason: 'attempts_exhausted', final: true }]);
   });
 
   it('тест брифу 7: після трьох спроб з 429 користувач в остаточних failed', async () => {
@@ -827,14 +853,14 @@ describe('runDailyReminders: збій кожного методу сховища
     expect(messenger.attempts).toEqual(['chat-anna', 'chat-vira']);
   });
 
-  it('AttemptLog.isStopped падає для одного: йому error, без відправки', async () => {
+  it('AttemptLog.getStopReason падає для одного: йому error, без відправки', async () => {
     const messenger = new FakeMessenger();
     const deps: RunDeps = {
       taskRepo: new FakeTaskRepo(threeOverdueTasks()),
       userRepo: new FakeUserRepo(threeUsers()),
       messenger: messenger,
       sentLog: new FakeSentLog(),
-      attemptLog: new AttemptLogFailingOn('isStopped', 'bohdan'),
+      attemptLog: new AttemptLogFailingOn('getStopReason', 'bohdan'),
       lock: new FakeLock(),
       sendTimeoutMs: SEND_TIMEOUT_MS,
     };

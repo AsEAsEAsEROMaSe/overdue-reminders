@@ -20,3 +20,9 @@ export interface Failure {
   chatId: string;
   kind: FailureKind;
 }
+
+// Запис журналу спроб: кому і чому сьогодні більше не пробуємо
+export interface StopRecord {
+  key: string;
+  reason: string;
+}

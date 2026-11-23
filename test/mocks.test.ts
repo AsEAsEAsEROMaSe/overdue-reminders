@@ -218,18 +218,28 @@ describe('FakeAttemptLog', () => {
   it('stop діє лише на свого користувача і свій день', async () => {
     const log = new FakeAttemptLog();
 
-    await log.stop('anna', '2026-03-10');
+    await log.stop('anna', '2026-03-10', 'blocked');
 
-    expect(await log.isStopped('anna', '2026-03-10')).toBe(true);
-    expect(await log.isStopped('anna', '2026-03-11')).toBe(false);
-    expect(await log.isStopped('bohdan', '2026-03-10')).toBe(false);
+    expect(await log.getStopReason('anna', '2026-03-10')).toBe('blocked');
+    expect(await log.getStopReason('anna', '2026-03-11')).toBe(undefined);
+    expect(await log.getStopReason('bohdan', '2026-03-10')).toBe(undefined);
+  });
+
+  it('getStopReason повертає саме ту причину, з якою зупинили', async () => {
+    const log = new FakeAttemptLog();
+
+    await log.stop('anna', '2026-03-10', 'blocked');
+    await log.stop('bohdan', '2026-03-10', 'attempts_exhausted');
+
+    expect(await log.getStopReason('anna', '2026-03-10')).toBe('blocked');
+    expect(await log.getStopReason('bohdan', '2026-03-10')).toBe('attempts_exhausted');
   });
 
   it('stop не змінює лічильник спроб', async () => {
     const log = new FakeAttemptLog();
     await log.add('anna', '2026-03-10');
 
-    await log.stop('anna', '2026-03-10');
+    await log.stop('anna', '2026-03-10', 'blocked');
 
     expect(await log.count('anna', '2026-03-10')).toBe(1);
   });

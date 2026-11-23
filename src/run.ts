@@ -88,9 +88,10 @@ async function remindUser(group: UserTasks, day: string, deps: RunDeps): Promise
     return { status: 'already_sent', reason: '', final: false };
   }
 
-  const stopped = await deps.attemptLog.isStopped(userId, day);
-  if (stopped) {
-    return { status: 'failed', reason: 'attempts_exhausted', final: true };
+  // Сьогодні вже вирішили не пробувати: у звіт та сама причина, що й тоді
+  const stopReason = await deps.attemptLog.getStopReason(userId, day);
+  if (stopReason !== undefined) {
+    return { status: 'failed', reason: stopReason, final: true };
   }
   await deps.attemptLog.add(userId, day);
   const attempts = await deps.attemptLog.count(userId, day);
@@ -111,7 +112,11 @@ async function remindUser(group: UserTasks, day: string, deps: RunDeps): Promise
       final = true;
     }
     if (final) {
-      await deps.attemptLog.stop(userId, day);
+      let reasonToSave = 'attempts_exhausted';
+      if (reason === 'blocked') {
+        reasonToSave = 'blocked';
+      }
+      await deps.attemptLog.stop(userId, day, reasonToSave);
     }
 
     return { status: 'failed', reason: reason, final: final };

@@ -212,6 +212,18 @@ const MUTATIONS = [
     to: '    } catch (error) {\n      reject(error);\n      return;\n    }',
   },
   {
+    name: 'після 403 зупинка з причиною attempts_exhausted',
+    file: 'src/run.ts',
+    from: "        reasonToSave = 'blocked';",
+    to: "        reasonToSave = 'attempts_exhausted';",
+  },
+  {
+    name: 'запис зупинки завжди з причиною blocked',
+    file: 'src/run.ts',
+    from: "      let reasonToSave = 'attempts_exhausted';",
+    to: "      let reasonToSave = 'blocked';",
+  },
+  {
     name: 'немає Lock',
     file: 'src/run.ts',
     from: '  if (!acquired) {',
@@ -256,7 +268,7 @@ const MUTATIONS = [
   {
     name: 'немає перевірки «сьогодні більше не пробувати»',
     file: 'src/run.ts',
-    from: '  if (stopped) {',
+    from: '  if (stopReason !== undefined) {',
     to: '  if (false) {',
   },
   {
