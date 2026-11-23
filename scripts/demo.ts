@@ -107,6 +107,9 @@ function failureText(reason: string): string {
   if (reason === 'attempts_exhausted') {
     return 'спроби на сьогодні вичерпано';
   }
+  if (reason === 'mark_failed') {
+    return 'доставлено, але позначка не записалась';
+  }
   return 'невідома помилка';
 }
 

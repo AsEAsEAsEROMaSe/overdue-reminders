@@ -224,6 +224,12 @@ const MUTATIONS = [
     to: "      let reasonToSave = 'blocked';",
   },
   {
+    name: 'збій mark як звичайна помилка error',
+    file: 'src/run.ts',
+    from: "reason: 'mark_failed'",
+    to: "reason: 'error'",
+  },
+  {
     name: 'немає Lock',
     file: 'src/run.ts',
     from: '  if (!acquired) {',

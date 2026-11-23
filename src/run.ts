@@ -122,7 +122,13 @@ async function remindUser(group: UserTasks, day: string, deps: RunDeps): Promise
     return { status: 'failed', reason: reason, final: final };
   }
 
-  await deps.sentLog.mark(userId, day);
+  // Повідомлення вже доставлено. Якщо позначка не записалась,
+  // наступний запуск надішле вдруге: окрема причина, щоб це було видно у звіті
+  try {
+    await deps.sentLog.mark(userId, day);
+  } catch (error) {
+    return { status: 'failed', reason: 'mark_failed', final: false };
+  }
   return { status: 'sent', reason: '', final: false };
 }
 

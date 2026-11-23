@@ -342,7 +342,19 @@ describe('runDailyReminders: збій одному не зупиняє решт�
 
     expect(sentChatIds(messenger)).toEqual(['chat-anna', 'chat-bohdan', 'chat-vira']);
     expect(report.sent).toEqual(['bohdan', 'vira']);
-    expect(report.failed).toEqual([{ userId: 'anna', reason: 'error', final: false }]);
+    expect(report.failed).toEqual([{ userId: 'anna', reason: 'mark_failed', final: false }]);
+  });
+
+  it('SentLog.mark падав: наступний запуск надсилає вдруге (відомий дубль, припущення 12)', async () => {
+    const messenger = new FakeMessenger();
+    const sentLog = new SentLogFailingMarkFor('anna');
+    const deps = buildDeps(new FakeTaskRepo(oneOverdueTaskForAnna()), new FakeUserRepo(threeUsers()), messenger, sentLog);
+
+    await runDailyReminders(nowAt10(), deps);
+    const secondReport = await runDailyReminders(laterSameDay(), deps);
+
+    expect(sentChatIds(messenger)).toEqual(['chat-anna', 'chat-anna']);
+    expect(secondReport.failed).toEqual([{ userId: 'anna', reason: 'mark_failed', final: false }]);
   });
 });
 
