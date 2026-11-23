@@ -10,12 +10,14 @@
  * @see {@link ../src/types.ts}
  * @see {@link ../src/mocks.ts}
  * @see {@link ../src/errors.ts}
+ * @see {@link ./faulty.types.ts}
  */
 
 import type { TaskRepo, UserRepo, Messenger, SentLog, AttemptLog, Lock } from '../src/ports.ts';
 import type { Task, User } from '../src/types.ts';
 import { FakeTaskRepo, FakeUserRepo, FakeSentLog, FakeAttemptLog, FakeLock } from '../src/mocks.ts';
 import { TelegramError } from '../src/errors.ts';
+import type { AttemptLogMethod } from './faulty.types.ts';
 
 // Перший виклик падає, далі працює як звичайне сховище
 export class TaskRepoFailingOnce implements TaskRepo {
@@ -149,16 +151,16 @@ export class SentLogFailingHasFor implements SentLog {
 // Один метод журналу спроб падає для одного користувача
 export class AttemptLogFailingOn implements AttemptLog {
   realLog = new FakeAttemptLog();
-  failingMethod: string;
+  failingMethod: AttemptLogMethod;
   failingUserId: string;
 
-  constructor(failingMethod: string, failingUserId: string) {
+  constructor(failingMethod: AttemptLogMethod, failingUserId: string) {
     this.failingMethod = failingMethod;
     this.failingUserId = failingUserId;
   }
 
   // Кидає помилку, якщо зараз викликали саме той метод для того користувача
-  failIfNeeded(method: string, userId: string): void {
+  failIfNeeded(method: AttemptLogMethod, userId: string): void {
     if (method !== this.failingMethod) {
       return;
     }

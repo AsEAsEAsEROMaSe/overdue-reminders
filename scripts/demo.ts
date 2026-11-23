@@ -184,6 +184,18 @@ function printReport(report: RunReport, messenger: FakeMessenger, sentFrom: numb
       continue;
     }
 
+    // Користувач без chat_id чи якого немає в базі: показуємо причину
+    let skippedReason = '';
+    for (const item of report.skipped) {
+      if (item.id === person) {
+        skippedReason = item.reason;
+      }
+    }
+    if (skippedReason !== '') {
+      printPerson(gray('·'), person, gray('пропущено: ' + skippedText(skippedReason)));
+      continue;
+    }
+
     printPerson(gray('·'), person, gray('сьогодні вже доставлено'));
   }
 
