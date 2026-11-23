@@ -83,12 +83,19 @@ function readHeader(file, text) {
   return header;
 }
 
+// Чи однакові два списки: кожен елемент одного є в іншому, в обидва боки.
+// Перевірка в обидва боки потрібна, щоб дубль у шапці не сховав пропущений рядок
 function sameSet(a, b) {
   if (a.length !== b.length) {
     return false;
   }
   for (const item of a) {
     if (!b.includes(item)) {
+      return false;
+    }
+  }
+  for (const item of b) {
+    if (!a.includes(item)) {
       return false;
     }
   }
