@@ -72,7 +72,13 @@ export function makeTaskWithStringDeadline(id: string, assigneeId: string, deadl
 
 // Запис з бази, де assigneeId = null
 export function makeTaskWithNullAssignee(id: string, deadlineIso: string): Task {
-  const oldRecord = { id: id, assigneeId: null, title: 'Виконавець null', deadline: new Date(deadlineIso), status: 'open' };
+  const oldRecord = {
+    id: id,
+    assigneeId: null,
+    title: 'Виконавець null',
+    deadline: new Date(deadlineIso),
+    status: 'open',
+  };
   return oldRecord as unknown as Task;
 }
 

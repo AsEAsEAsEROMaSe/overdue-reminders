@@ -17,7 +17,7 @@ import { runDailyReminders } from '../src/run.ts';
 import type { RunDeps } from '../src/run.types.ts';
 import { FakeTaskRepo, FakeUserRepo, FakeMessenger, FakeSentLog, FakeAttemptLog, FakeLock } from '../src/mocks.ts';
 import type { Task, User, RunReport } from '../src/types.ts';
-import type { TaskRepo, UserRepo, Messenger, SentLog } from '../src/ports.ts';
+import type { TaskRepo, UserRepo, Messenger, SentLog, AttemptLog, Lock } from '../src/ports.ts';
 import {
   TaskRepoFailingOnce,
   TaskRepoWithDoneTasks,
@@ -104,6 +104,48 @@ function buildDeps(taskRepo: TaskRepo, userRepo: UserRepo, messenger: Messenger,
     sentLog: sentLog,
     attemptLog: new FakeAttemptLog(),
     lock: new FakeLock(),
+    sendTimeoutMs: SEND_TIMEOUT_MS,
+  };
+  return deps;
+}
+
+// Залежності зі своїм таймаутом Telegram
+function depsWithTimeout(tasks: Task[], messenger: Messenger, sendTimeoutMs: number): RunDeps {
+  const deps: RunDeps = {
+    taskRepo: new FakeTaskRepo(tasks),
+    userRepo: new FakeUserRepo(threeUsers()),
+    messenger: messenger,
+    sentLog: new FakeSentLog(),
+    attemptLog: new FakeAttemptLog(),
+    lock: new FakeLock(),
+    sendTimeoutMs: sendTimeoutMs,
+  };
+  return deps;
+}
+
+// Залежності зі своїм журналом спроб (наприклад, що падає)
+function depsWithAttemptLog(tasks: Task[], messenger: Messenger, attemptLog: AttemptLog): RunDeps {
+  const deps: RunDeps = {
+    taskRepo: new FakeTaskRepo(tasks),
+    userRepo: new FakeUserRepo(threeUsers()),
+    messenger: messenger,
+    sentLog: new FakeSentLog(),
+    attemptLog: attemptLog,
+    lock: new FakeLock(),
+    sendTimeoutMs: SEND_TIMEOUT_MS,
+  };
+  return deps;
+}
+
+// Залежності зі своїм сховищем задач і своїм блокуванням
+function depsWithLock(taskRepo: TaskRepo, messenger: Messenger, lock: Lock): RunDeps {
+  const deps: RunDeps = {
+    taskRepo: taskRepo,
+    userRepo: new FakeUserRepo(threeUsers()),
+    messenger: messenger,
+    sentLog: new FakeSentLog(),
+    attemptLog: new FakeAttemptLog(),
+    lock: lock,
     sendTimeoutMs: SEND_TIMEOUT_MS,
   };
   return deps;
@@ -310,7 +352,9 @@ describe('runDailyReminders: збій одному не зупиняє решт�
 
   it('невідома помилка месенджера записується як error', async () => {
     const taskRepo = new FakeTaskRepo(threeOverdueTasks());
-    const deps = buildDeps(taskRepo, new FakeUserRepo(threeUsers()), new BrokenMessenger(), new FakeSentLog());
+    const userRepo = new FakeUserRepo(threeUsers());
+    const messenger = new BrokenMessenger();
+    const deps = buildDeps(taskRepo, userRepo, messenger, new FakeSentLog());
 
     const report = await runDailyReminders(nowAt10(), deps);
 
@@ -325,7 +369,8 @@ describe('runDailyReminders: збій одному не зупиняє решт�
   it('помилка UserRepo для одного користувача не зупиняє решту', async () => {
     const messenger = new FakeMessenger();
     const userRepo = new UserRepoFailingFor(threeUsers(), 'bohdan');
-    const deps = buildDeps(new FakeTaskRepo(threeOverdueTasks()), userRepo, messenger, new FakeSentLog());
+    const taskRepo = new FakeTaskRepo(threeOverdueTasks());
+    const deps = buildDeps(taskRepo, userRepo, messenger, new FakeSentLog());
 
     const report = await runDailyReminders(nowAt10(), deps);
 
@@ -336,7 +381,9 @@ describe('runDailyReminders: збій одному не зупиняє решт�
   it('помилка SentLog.mark для одного користувача не зупиняє решту', async () => {
     const messenger = new FakeMessenger();
     const sentLog = new SentLogFailingMarkFor('anna');
-    const deps = buildDeps(new FakeTaskRepo(threeOverdueTasks()), new FakeUserRepo(threeUsers()), messenger, sentLog);
+    const taskRepo = new FakeTaskRepo(threeOverdueTasks());
+    const userRepo = new FakeUserRepo(threeUsers());
+    const deps = buildDeps(taskRepo, userRepo, messenger, sentLog);
 
     const report = await runDailyReminders(nowAt10(), deps);
 
@@ -348,7 +395,9 @@ describe('runDailyReminders: збій одному не зупиняє решт�
   it('SentLog.mark падав: наступний запуск надсилає вдруге (відомий дубль, припущення 12)', async () => {
     const messenger = new FakeMessenger();
     const sentLog = new SentLogFailingMarkFor('anna');
-    const deps = buildDeps(new FakeTaskRepo(oneOverdueTaskForAnna()), new FakeUserRepo(threeUsers()), messenger, sentLog);
+    const taskRepo = new FakeTaskRepo(oneOverdueTaskForAnna());
+    const userRepo = new FakeUserRepo(threeUsers());
+    const deps = buildDeps(taskRepo, userRepo, messenger, sentLog);
 
     await runDailyReminders(nowAt10(), deps);
     const secondReport = await runDailyReminders(laterSameDay(), deps);
@@ -378,7 +427,9 @@ describe('runDailyReminders: таймаут відправки', () => {
   it('відповідь за мілісекунду до таймауту вважається успіхом', async () => {
     vi.useFakeTimers();
     const messenger = new SlowMessenger(SEND_TIMEOUT_MS - 1);
-    const deps = buildDeps(new FakeTaskRepo(oneOverdueTaskForAnna()), new FakeUserRepo(threeUsers()), messenger, new FakeSentLog());
+    const taskRepo = new FakeTaskRepo(oneOverdueTaskForAnna());
+    const userRepo = new FakeUserRepo(threeUsers());
+    const deps = buildDeps(taskRepo, userRepo, messenger, new FakeSentLog());
 
     const report = await runWithFakeTimers(nowAt10(), deps);
 
@@ -419,7 +470,9 @@ describe('runDailyReminders: таймаут відправки', () => {
   it('send падає одразу, без Promise: таймер прибрано, у звіті blocked', async () => {
     vi.useFakeTimers();
     const messenger = new MessengerThrowingSync(403);
-    const deps = buildDeps(new FakeTaskRepo(oneOverdueTaskForAnna()), new FakeUserRepo(threeUsers()), messenger, new FakeSentLog());
+    const taskRepo = new FakeTaskRepo(oneOverdueTaskForAnna());
+    const userRepo = new FakeUserRepo(threeUsers());
+    const deps = buildDeps(taskRepo, userRepo, messenger, new FakeSentLog());
 
     const report = await runDailyReminders(nowAt10(), deps);
 
@@ -430,7 +483,9 @@ describe('runDailyReminders: таймаут відправки', () => {
   it('send падає одразу з 429: таймер прибрано, спробуємо наступним запуском', async () => {
     vi.useFakeTimers();
     const messenger = new MessengerThrowingSync(429);
-    const deps = buildDeps(new FakeTaskRepo(oneOverdueTaskForAnna()), new FakeUserRepo(threeUsers()), messenger, new FakeSentLog());
+    const taskRepo = new FakeTaskRepo(oneOverdueTaskForAnna());
+    const userRepo = new FakeUserRepo(threeUsers());
+    const deps = buildDeps(taskRepo, userRepo, messenger, new FakeSentLog());
 
     const report = await runDailyReminders(nowAt10(), deps);
 
@@ -747,15 +802,8 @@ describe('runDailyReminders: вхідні дані не змінюються', (
 describe('runDailyReminders: значення sendTimeoutMs', () => {
   it('береться саме з deps: таймаут 500, відповідь за 400 це успіх', async () => {
     vi.useFakeTimers();
-    const deps: RunDeps = {
-      taskRepo: new FakeTaskRepo(oneOverdueTaskForAnna()),
-      userRepo: new FakeUserRepo(threeUsers()),
-      messenger: new SlowMessenger(400),
-      sentLog: new FakeSentLog(),
-      attemptLog: new FakeAttemptLog(),
-      lock: new FakeLock(),
-      sendTimeoutMs: 500,
-    };
+    const messenger = new SlowMessenger(400);
+    const deps = depsWithTimeout(oneOverdueTaskForAnna(), messenger, 500);
 
     const running = runDailyReminders(nowAt10(), deps);
     await vi.advanceTimersByTimeAsync(500);
@@ -766,34 +814,24 @@ describe('runDailyReminders: значення sendTimeoutMs', () => {
 
   it('береться саме з deps: таймаут 500, відповідь за 600 це timeout', async () => {
     vi.useFakeTimers();
-    const deps: RunDeps = {
-      taskRepo: new FakeTaskRepo(oneOverdueTaskForAnna()),
-      userRepo: new FakeUserRepo(threeUsers()),
-      messenger: new SlowMessenger(600),
-      sentLog: new FakeSentLog(),
-      attemptLog: new FakeAttemptLog(),
-      lock: new FakeLock(),
-      sendTimeoutMs: 500,
-    };
+    const messenger = new SlowMessenger(600);
+    const deps = depsWithTimeout(oneOverdueTaskForAnna(), messenger, 500);
 
     const running = runDailyReminders(nowAt10(), deps);
     await vi.advanceTimersByTimeAsync(600);
     const report = await running;
 
-    expect(report).toEqual({ sent: [], skipped: [], failed: [{ userId: 'anna', reason: 'timeout', final: false }] });
+    expect(report).toEqual({
+      sent: [],
+      skipped: [],
+      failed: [{ userId: 'anna', reason: 'timeout', final: false }],
+    });
   });
 
   it('береться саме з deps: таймаут 20000, відповідь за 15000 це успіх', async () => {
     vi.useFakeTimers();
-    const deps: RunDeps = {
-      taskRepo: new FakeTaskRepo(oneOverdueTaskForAnna()),
-      userRepo: new FakeUserRepo(threeUsers()),
-      messenger: new SlowMessenger(15000),
-      sentLog: new FakeSentLog(),
-      attemptLog: new FakeAttemptLog(),
-      lock: new FakeLock(),
-      sendTimeoutMs: 20000,
-    };
+    const messenger = new SlowMessenger(15000);
+    const deps = depsWithTimeout(oneOverdueTaskForAnna(), messenger, 20000);
 
     const running = runDailyReminders(nowAt10(), deps);
     await vi.advanceTimersByTimeAsync(20000);
@@ -805,7 +843,9 @@ describe('runDailyReminders: значення sendTimeoutMs', () => {
   it('відповідь рівно на межі таймауту вже timeout: таймер ставиться першим', async () => {
     vi.useFakeTimers();
     const messenger = new SlowMessenger(SEND_TIMEOUT_MS);
-    const deps = buildDeps(new FakeTaskRepo(oneOverdueTaskForAnna()), new FakeUserRepo(threeUsers()), messenger, new FakeSentLog());
+    const taskRepo = new FakeTaskRepo(oneOverdueTaskForAnna());
+    const userRepo = new FakeUserRepo(threeUsers());
+    const deps = buildDeps(taskRepo, userRepo, messenger, new FakeSentLog());
 
     const report = await runWithFakeTimers(nowAt10(), deps);
 
@@ -830,7 +870,10 @@ describe('runDailyReminders: значення sendTimeoutMs', () => {
 
 describe('runDailyReminders: інші коди і помилки Telegram', () => {
   it('код 400 це error, не blocked: наступний запуск пробує знову', async () => {
-    const deps = buildDeps(new FakeTaskRepo(oneOverdueTaskForAnna()), new FakeUserRepo(threeUsers()), new MessengerFailingWithCode(400), new FakeSentLog());
+    const taskRepo = new FakeTaskRepo(oneOverdueTaskForAnna());
+    const userRepo = new FakeUserRepo(threeUsers());
+    const messenger = new MessengerFailingWithCode(400);
+    const deps = buildDeps(taskRepo, userRepo, messenger, new FakeSentLog());
 
     const report1 = await runDailyReminders(nowAt10(), deps);
     const report2 = await runDailyReminders(laterSameDay(), deps);
@@ -840,7 +883,10 @@ describe('runDailyReminders: інші коди і помилки Telegram', () =
   });
 
   it('код 401 це error, не blocked', async () => {
-    const deps = buildDeps(new FakeTaskRepo(oneOverdueTaskForAnna()), new FakeUserRepo(threeUsers()), new MessengerFailingWithCode(401), new FakeSentLog());
+    const taskRepo = new FakeTaskRepo(oneOverdueTaskForAnna());
+    const userRepo = new FakeUserRepo(threeUsers());
+    const messenger = new MessengerFailingWithCode(401);
+    const deps = buildDeps(taskRepo, userRepo, messenger, new FakeSentLog());
 
     const report = await runDailyReminders(nowAt10(), deps);
 
@@ -848,7 +894,10 @@ describe('runDailyReminders: інші коди і помилки Telegram', () =
   });
 
   it('код 500 це error, не rate_limited', async () => {
-    const deps = buildDeps(new FakeTaskRepo(oneOverdueTaskForAnna()), new FakeUserRepo(threeUsers()), new MessengerFailingWithCode(500), new FakeSentLog());
+    const taskRepo = new FakeTaskRepo(oneOverdueTaskForAnna());
+    const userRepo = new FakeUserRepo(threeUsers());
+    const messenger = new MessengerFailingWithCode(500);
+    const deps = buildDeps(taskRepo, userRepo, messenger, new FakeSentLog());
 
     const report = await runDailyReminders(nowAt10(), deps);
 
@@ -856,7 +905,10 @@ describe('runDailyReminders: інші коди і помилки Telegram', () =
   });
 
   it('код 428 (сусід 429) це error', async () => {
-    const deps = buildDeps(new FakeTaskRepo(oneOverdueTaskForAnna()), new FakeUserRepo(threeUsers()), new MessengerFailingWithCode(428), new FakeSentLog());
+    const taskRepo = new FakeTaskRepo(oneOverdueTaskForAnna());
+    const userRepo = new FakeUserRepo(threeUsers());
+    const messenger = new MessengerFailingWithCode(428);
+    const deps = buildDeps(taskRepo, userRepo, messenger, new FakeSentLog());
 
     const report = await runDailyReminders(nowAt10(), deps);
 
@@ -864,7 +916,10 @@ describe('runDailyReminders: інші коди і помилки Telegram', () =
   });
 
   it('третя помилка 500 остаточна, як і для 429', async () => {
-    const deps = buildDeps(new FakeTaskRepo(oneOverdueTaskForAnna()), new FakeUserRepo(threeUsers()), new MessengerFailingWithCode(500), new FakeSentLog());
+    const taskRepo = new FakeTaskRepo(oneOverdueTaskForAnna());
+    const userRepo = new FakeUserRepo(threeUsers());
+    const messenger = new MessengerFailingWithCode(500);
+    const deps = buildDeps(taskRepo, userRepo, messenger, new FakeSentLog());
 
     await runDailyReminders(nowAt10(), deps);
     await runDailyReminders(nowAt10(), deps);
@@ -874,7 +929,10 @@ describe('runDailyReminders: інші коди і помилки Telegram', () =
   });
 
   it('кинутий рядок замість помилки це error', async () => {
-    const deps = buildDeps(new FakeTaskRepo(oneOverdueTaskForAnna()), new FakeUserRepo(threeUsers()), new MessengerThrowingString(), new FakeSentLog());
+    const taskRepo = new FakeTaskRepo(oneOverdueTaskForAnna());
+    const userRepo = new FakeUserRepo(threeUsers());
+    const messenger = new MessengerThrowingString();
+    const deps = buildDeps(taskRepo, userRepo, messenger, new FakeSentLog());
 
     const report = await runDailyReminders(nowAt10(), deps);
 
@@ -885,84 +943,79 @@ describe('runDailyReminders: інші коди і помилки Telegram', () =
 describe('runDailyReminders: збій кожного методу сховища', () => {
   it('SentLog.has падає для одного: йому error, без відправки, решта отримують', async () => {
     const messenger = new FakeMessenger();
-    const deps = buildDeps(new FakeTaskRepo(threeOverdueTasks()), new FakeUserRepo(threeUsers()), messenger, new SentLogFailingHasFor('bohdan'));
+    const taskRepo = new FakeTaskRepo(threeOverdueTasks());
+    const userRepo = new FakeUserRepo(threeUsers());
+    const sentLog = new SentLogFailingHasFor('bohdan');
+    const deps = buildDeps(taskRepo, userRepo, messenger, sentLog);
 
     const report = await runDailyReminders(nowAt10(), deps);
 
-    expect(report).toEqual({ sent: ['anna', 'vira'], skipped: [], failed: [{ userId: 'bohdan', reason: 'error', final: false }] });
+    expect(report).toEqual({
+      sent: ['anna', 'vira'],
+      skipped: [],
+      failed: [{ userId: 'bohdan', reason: 'error', final: false }],
+    });
     expect(messenger.attempts).toEqual(['chat-anna', 'chat-vira']);
   });
 
   it('AttemptLog.getStopReason падає для одного: йому error, без відправки', async () => {
     const messenger = new FakeMessenger();
-    const deps: RunDeps = {
-      taskRepo: new FakeTaskRepo(threeOverdueTasks()),
-      userRepo: new FakeUserRepo(threeUsers()),
-      messenger: messenger,
-      sentLog: new FakeSentLog(),
-      attemptLog: new AttemptLogFailingOn('getStopReason', 'bohdan'),
-      lock: new FakeLock(),
-      sendTimeoutMs: SEND_TIMEOUT_MS,
-    };
+    const attemptLog = new AttemptLogFailingOn('getStopReason', 'bohdan');
+    const deps = depsWithAttemptLog(threeOverdueTasks(), messenger, attemptLog);
 
     const report = await runDailyReminders(nowAt10(), deps);
 
-    expect(report).toEqual({ sent: ['anna', 'vira'], skipped: [], failed: [{ userId: 'bohdan', reason: 'error', final: false }] });
+    expect(report).toEqual({
+      sent: ['anna', 'vira'],
+      skipped: [],
+      failed: [{ userId: 'bohdan', reason: 'error', final: false }],
+    });
     expect(messenger.attempts).toEqual(['chat-anna', 'chat-vira']);
   });
 
   it('AttemptLog.add падає для одного: йому error, без відправки', async () => {
     const messenger = new FakeMessenger();
-    const deps: RunDeps = {
-      taskRepo: new FakeTaskRepo(threeOverdueTasks()),
-      userRepo: new FakeUserRepo(threeUsers()),
-      messenger: messenger,
-      sentLog: new FakeSentLog(),
-      attemptLog: new AttemptLogFailingOn('add', 'bohdan'),
-      lock: new FakeLock(),
-      sendTimeoutMs: SEND_TIMEOUT_MS,
-    };
+    const attemptLog = new AttemptLogFailingOn('add', 'bohdan');
+    const deps = depsWithAttemptLog(threeOverdueTasks(), messenger, attemptLog);
 
     const report = await runDailyReminders(nowAt10(), deps);
 
-    expect(report).toEqual({ sent: ['anna', 'vira'], skipped: [], failed: [{ userId: 'bohdan', reason: 'error', final: false }] });
+    expect(report).toEqual({
+      sent: ['anna', 'vira'],
+      skipped: [],
+      failed: [{ userId: 'bohdan', reason: 'error', final: false }],
+    });
     expect(messenger.attempts).toEqual(['chat-anna', 'chat-vira']);
   });
 
   it('AttemptLog.count падає для одного: йому error, без відправки', async () => {
     const messenger = new FakeMessenger();
-    const deps: RunDeps = {
-      taskRepo: new FakeTaskRepo(threeOverdueTasks()),
-      userRepo: new FakeUserRepo(threeUsers()),
-      messenger: messenger,
-      sentLog: new FakeSentLog(),
-      attemptLog: new AttemptLogFailingOn('count', 'bohdan'),
-      lock: new FakeLock(),
-      sendTimeoutMs: SEND_TIMEOUT_MS,
-    };
+    const attemptLog = new AttemptLogFailingOn('count', 'bohdan');
+    const deps = depsWithAttemptLog(threeOverdueTasks(), messenger, attemptLog);
 
     const report = await runDailyReminders(nowAt10(), deps);
 
-    expect(report).toEqual({ sent: ['anna', 'vira'], skipped: [], failed: [{ userId: 'bohdan', reason: 'error', final: false }] });
+    expect(report).toEqual({
+      sent: ['anna', 'vira'],
+      skipped: [],
+      failed: [{ userId: 'bohdan', reason: 'error', final: false }],
+    });
     expect(messenger.attempts).toEqual(['chat-anna', 'chat-vira']);
   });
 
   it('AttemptLog.stop падає після 403: у звіті error, не blocked, решта отримують', async () => {
     const messenger = new FakeMessenger();
     messenger.failFor('chat-bohdan', 'blocked');
-    const deps: RunDeps = {
-      taskRepo: new FakeTaskRepo(threeOverdueTasks()),
-      userRepo: new FakeUserRepo(threeUsers()),
-      messenger: messenger,
-      sentLog: new FakeSentLog(),
-      attemptLog: new AttemptLogFailingOn('stop', 'bohdan'),
-      lock: new FakeLock(),
-      sendTimeoutMs: SEND_TIMEOUT_MS,
-    };
+    const attemptLog = new AttemptLogFailingOn('stop', 'bohdan');
+    const deps = depsWithAttemptLog(threeOverdueTasks(), messenger, attemptLog);
 
     const report = await runDailyReminders(nowAt10(), deps);
 
-    expect(report).toEqual({ sent: ['anna', 'vira'], skipped: [], failed: [{ userId: 'bohdan', reason: 'error', final: false }] });
+    expect(report).toEqual({
+      sent: ['anna', 'vira'],
+      skipped: [],
+      failed: [{ userId: 'bohdan', reason: 'error', final: false }],
+    });
   });
 });
 
@@ -970,15 +1023,9 @@ describe('runDailyReminders: блокування, кожна змінна', () 
   it('ключ блокування за київською добою: о 00:30 за Києвом це вже нова доба', async () => {
     // 22:30 UTC 9 березня = 00:30 10 березня за Києвом
     const lock = new RecordingLock();
-    const deps: RunDeps = {
-      taskRepo: new FakeTaskRepo(oneOverdueTaskForAnna()),
-      userRepo: new FakeUserRepo(threeUsers()),
-      messenger: new FakeMessenger(),
-      sentLog: new FakeSentLog(),
-      attemptLog: new FakeAttemptLog(),
-      lock: lock,
-      sendTimeoutMs: SEND_TIMEOUT_MS,
-    };
+    const taskRepo = new FakeTaskRepo(oneOverdueTaskForAnna());
+    const messenger = new FakeMessenger();
+    const deps = depsWithLock(taskRepo, messenger, lock);
 
     await runDailyReminders(new Date('2026-03-09T22:30:00Z'), deps);
 
@@ -988,15 +1035,9 @@ describe('runDailyReminders: блокування, кожна змінна', () 
 
   it('знімається той самий ключ, що й брався, рівно один раз', async () => {
     const lock = new RecordingLock();
-    const deps: RunDeps = {
-      taskRepo: new FakeTaskRepo(threeOverdueTasks()),
-      userRepo: new FakeUserRepo(threeUsers()),
-      messenger: new FakeMessenger(),
-      sentLog: new FakeSentLog(),
-      attemptLog: new FakeAttemptLog(),
-      lock: lock,
-      sendTimeoutMs: SEND_TIMEOUT_MS,
-    };
+    const taskRepo = new FakeTaskRepo(threeOverdueTasks());
+    const messenger = new FakeMessenger();
+    const deps = depsWithLock(taskRepo, messenger, lock);
 
     await runDailyReminders(nowAt10(), deps);
 
@@ -1024,7 +1065,9 @@ describe('runDailyReminders: блокування, кожна змінна', () 
 
   it('при зайнятому блокуванні задачі навіть не читаються', async () => {
     const taskRepo = new CountingTaskRepo(threeOverdueTasks());
-    const deps = buildDeps(taskRepo, new FakeUserRepo(threeUsers()), new FakeMessenger(), new FakeSentLog());
+    const userRepo = new FakeUserRepo(threeUsers());
+    const messenger = new FakeMessenger();
+    const deps = buildDeps(taskRepo, userRepo, messenger, new FakeSentLog());
     await deps.lock.acquire('daily-reminders:' + DAY);
 
     await runDailyReminders(nowAt10(), deps);
@@ -1034,7 +1077,9 @@ describe('runDailyReminders: блокування, кожна змінна', () 
 
   it('звичайний запуск читає задачі рівно один раз', async () => {
     const taskRepo = new CountingTaskRepo(threeOverdueTasks());
-    const deps = buildDeps(taskRepo, new FakeUserRepo(threeUsers()), new FakeMessenger(), new FakeSentLog());
+    const userRepo = new FakeUserRepo(threeUsers());
+    const messenger = new FakeMessenger();
+    const deps = buildDeps(taskRepo, userRepo, messenger, new FakeSentLog());
 
     await runDailyReminders(nowAt10(), deps);
 
@@ -1045,15 +1090,7 @@ describe('runDailyReminders: блокування, кожна змінна', () 
     const taskRepo = new CountingTaskRepo(threeOverdueTasks());
     const lock = new LockFailingOnAcquire();
     const messenger = new FakeMessenger();
-    const deps: RunDeps = {
-      taskRepo: taskRepo,
-      userRepo: new FakeUserRepo(threeUsers()),
-      messenger: messenger,
-      sentLog: new FakeSentLog(),
-      attemptLog: new FakeAttemptLog(),
-      lock: lock,
-      sendTimeoutMs: SEND_TIMEOUT_MS,
-    };
+    const deps = depsWithLock(taskRepo, messenger, lock);
 
     await expect(runDailyReminders(nowAt10(), deps)).rejects.toThrow('блокування недоступне');
 
@@ -1098,7 +1135,11 @@ describe('runDailyReminders: кожне поле користувача і зв�
 
     const report = await runDailyReminders(nowAt10(), deps);
 
-    expect(report).toEqual({ sent: [], skipped: [{ kind: 'task', id: 't9', reason: 'no_deadline' }], failed: [] });
+    expect(report).toEqual({
+      sent: [],
+      skipped: [{ kind: 'task', id: 't9', reason: 'no_deadline' }],
+      failed: [],
+    });
   });
 
   it('у звіті спершу пропущені задачі, потім пропущені користувачі', async () => {
@@ -1119,15 +1160,9 @@ describe('runDailyReminders: кожне поле користувача і зв�
 
   it('невалідний now: запуск падає з RangeError і блокування не бере', async () => {
     const lock = new RecordingLock();
-    const deps: RunDeps = {
-      taskRepo: new FakeTaskRepo(threeOverdueTasks()),
-      userRepo: new FakeUserRepo(threeUsers()),
-      messenger: new FakeMessenger(),
-      sentLog: new FakeSentLog(),
-      attemptLog: new FakeAttemptLog(),
-      lock: lock,
-      sendTimeoutMs: SEND_TIMEOUT_MS,
-    };
+    const taskRepo = new FakeTaskRepo(threeOverdueTasks());
+    const messenger = new FakeMessenger();
+    const deps = depsWithLock(taskRepo, messenger, lock);
 
     await expect(runDailyReminders(new Date('не дата'), deps)).rejects.toThrow(RangeError);
 
